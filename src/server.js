@@ -148,6 +148,55 @@ app.get("/api/orders", async (req, res) => {
     take: open ? 100 : 50
   }));
 });
+
+// Charge an order: records the sale in the POS (texasstores) exactly once,
+// which deducts POS stock and feeds all downstream reports automatically.
+// If kiosk promos made the total lower than POS prices, "Discount" units
+// (negative price in the POS) are added so the recorded total matches.
+app.post("/api/orders/:id/charge", async (req, res) => {
+  try {
+    const pm = req.body.paymentMethod === "credit" ? "credit" : "cash";
+    const order = await prisma.kioskOrder.findUnique({
+      where: { id: +req.params.id }, include: { items: true }
+    });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status !== "pending")
+      return res.status(400).json({ error: `Order already ${order.status}` });
+
+    const posItems = await fetchPosItems();
+    const byName = Object.fromEntries(posItems.map(i => [i.name, i]));
+    const items = [];
+    let posTotal = 0;
+    for (const li of order.items) {
+      const it = byName[li.itemName];
+      if (!it) return res.status(400).json({ error: `"${li.itemName}" no existe en el POS` });
+      items.push({ itemId: it.id, quantity: li.qty });
+      posTotal += it.priceCents * li.qty;
+    }
+    // offset promo discounts with the POS "Discount" item
+    const disc = byName["Discount"];
+    const diff = posTotal - order.totalCents;
+    if (diff > 0 && disc && disc.priceCents < 0) {
+      const n = Math.round(diff / Math.abs(disc.priceCents));
+      if (n > 0) items.push({ itemId: disc.id, quantity: n });
+    }
+
+    const r = await fetch(`${POS_URL}/api/sales`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, paymentMethod: pm })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: j.error || `POS error ${r.status}` });
+
+    const upd = await prisma.kioskOrder.update({
+      where: { id: order.id },
+      data: { status: "charged", paymentMethod: pm, posSaleId: j.saleId ?? null }
+    });
+    res.json({ ok: true, posSaleId: j.saleId ?? null, posTotalCents: j.totalCents ?? null, order: upd });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.put("/api/orders/:id", async (req, res) => {
   try {
     const status = req.body.status;
