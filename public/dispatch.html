@@ -78,14 +78,15 @@ async function load(){
     lastMaxId = Math.max(lastMaxId, maxId);
     $("#list").innerHTML = orders.length ? orders.map(o => `
       <div class="order ${o.status}">
-        <h2>#${o.number} <span class="status ${o.status}">${o.status==="pending"?"POR COBRAR":"PAGADO"}</span></h2>
+        <h2>#${o.number} <span class="status ${o.status}">${o.status==="pending"?"POR COBRAR":"PAGADO"+(o.paymentMethod==="credit"?" 💳":o.paymentMethod==="cash"?" 💵":"")}</span></h2>
         <div class="when">${ago(o.createdAt)} · orden ${o.id}</div>
         <table>${o.items.map(i=>`<tr><td>${i.qty} × ${i.itemName}</td><td>${money(i.lineTotalCents)}</td></tr>`).join("")}</table>
         ${o.note?`<div style="background:#fff8e1;padding:6px 10px;border-radius:8px;font-size:14px">📝 ${o.note}</div>`:""}
         <div class="tot">Total ${money(o.totalCents)}</div>
         <div class="btns">
           ${o.status==="pending"
-            ? `<button class="b-charge" onclick="setSt(${o.id},'charged')">💵 Cobrado</button>`
+            ? `<button class="b-charge" onclick="charge(${o.id},'cash')">💵 Efectivo</button>
+               <button class="b-charge" style="background:#1565c0" onclick="charge(${o.id},'credit')">💳 Tarjeta</button>`
             : `<button class="b-ready" onclick="setSt(${o.id},'done')">✅ Entregado</button>`}
           <button class="b-cancel" onclick="if(confirm('¿Cancelar orden #${o.number}?'))setSt(${o.id},'cancelled')">✕</button>
         </div>
@@ -94,6 +95,11 @@ async function load(){
   } catch(e){}
 }
 async function setSt(id, status){ await api("/api/orders/"+id,{method:"PUT",body:JSON.stringify({status})}); load(); }
+async function charge(id, paymentMethod){
+  const r = await api("/api/orders/"+id+"/charge",{method:"POST",body:JSON.stringify({paymentMethod})});
+  if (r.error) alert(r.error);
+  load();
+}
 setInterval(()=>{ $("#clock").textContent = new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}); },1000);
 setInterval(()=>{ if($("#list").style.display!=="none") load(); },5000);
 if (PIN) tryPin(); else showPin();
