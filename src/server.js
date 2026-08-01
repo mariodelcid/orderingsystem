@@ -176,15 +176,21 @@ app.post("/api/orders/:id/charge", async (req, res) => {
     // offset promo discounts with the POS "Discount" item
     const disc = byName["Discount"];
     const diff = posTotal - order.totalCents;
+    let discountCents = 0;
     if (diff > 0 && disc && disc.priceCents < 0) {
       const n = Math.round(diff / Math.abs(disc.priceCents));
-      if (n > 0) items.push({ itemId: disc.id, quantity: n });
+      if (n > 0) { items.push({ itemId: disc.id, quantity: n }); discountCents = n * Math.abs(disc.priceCents); }
     }
+    const expectedTotal = posTotal - discountCents;
+
+    const body = { items, paymentMethod: pm };
+    // the POS requires the tendered amount for cash sales (exact cash -> no change)
+    if (pm === "cash") body.amountTenderedCents = expectedTotal;
 
     const r = await fetch(`${POS_URL}/api/sales`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, paymentMethod: pm })
+      body: JSON.stringify(body)
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return res.status(502).json({ error: j.error || `POS error ${r.status}` });
