@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Despachador — Órdenes</title>
+<style>
+  :root { --red:#d32f2f; --yellow:#ffb300; --green:#2e7d32; --dark:#263238; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:system-ui,sans-serif; background:#eceff1; color:#263238; }
+  header { background:var(--dark); color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:20px; }
+  main { padding:16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  .order { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.12); border-top:8px solid var(--yellow); }
+  .order.charged { border-top-color:var(--green); }
+  .order h2 { font-size:26px; display:flex; justify-content:space-between; }
+  .order .when { color:#78909c; font-size:13px; margin-bottom:8px; }
+  .order table { width:100%; font-size:15px; border-collapse:collapse; margin:8px 0; }
+  .order td { padding:4px 0; border-bottom:1px dashed #eceff1; }
+  .order td:last-child { text-align:right; }
+  .tot { font-size:20px; font-weight:800; text-align:right; margin:6px 0; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .btns button { flex:1; border:none; border-radius:10px; padding:12px; font-size:16px; font-weight:700; cursor:pointer; }
+  .b-charge { background:var(--green); color:#fff; }
+  .b-ready { background:var(--yellow); color:#3e2723; }
+  .b-cancel { background:#eceff1; color:#b71c1c; flex:0 0 auto; }
+  .status { font-size:13px; font-weight:800; letter-spacing:.5px; }
+  .status.pending { color:#e65100; } .status.charged { color:var(--green); }
+  .empty { grid-column:1/-1; text-align:center; color:#90a4ae; font-size:22px; padding:60px 0; }
+  #pinBox { max-width:320px; margin:120px auto; background:#fff; border-radius:14px; padding:24px; text-align:center; }
+  #pinBox input { font-size:28px; width:150px; text-align:center; padding:8px; margin:12px 0; }
+  #pinBox button { background:var(--dark); color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:16px; cursor:pointer; }
+  a.nav { color:#fff; opacity:.8; margin-left:14px; text-decoration:none; font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Órdenes del kiosco</h1>
+  <div><span id="clock"></span><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
+</header>
+<div id="pinBox">
+  <h2>PIN de empleado</h2>
+  <input id="pin" type="password" inputmode="numeric" maxlength="8">
+  <br><button onclick="tryPin()">Entrar</button>
+</div>
+<main id="list" style="display:none"></main>
+<audio id="ding" preload="auto"
+ src="data:audio/wav;base64,UklGRl4EAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YToEAACAgICAgICAgICAgICAgICAgICAgICAgICAf3+Af4B/gH+Af4B/gH+AgICAgICAgICAgH+Af3+AgICAgICAf39/f4CAgICAgIB/f39/f4CAgIGBgYB/fn5+f4CBgoKCgX9+fX1+gIGDg4OBf318fH6AgoSEg4F+fHt8foGEhYSBfnt6e36BhYaFgX16eXt+goaHhYF9eXh6foKHiIaBfHh3en6DiImHgXx3dnl+hIqKh4F7dnV5foWLi4iBe3V0eH6GjIyIgXp0c3h+h42NiYF6c3J3foiOjomBeXJxd36Jj4+KgXlxcHZ+ipCQioF4cG92fouRkYuBeG9udX6MkpKMgXdubXV+jZOTjIF3bmx0fo6UlI2BdmxrdH6PlZWNgXZsanN+kJaWjoF1a2lzfpGXl4+BdWpoc36SmJiPgXRpZ3J+k5mZkIF0aWZxfpSamZCBc2hlcX6VmpqRgXNnZXB+lpubkYFyZmRwfpecnJKBcmVjb36YnZ2SgXFkYm9+mZ6ek4FxZGFufpqfn5OBcGNhbn6boKCUgXBiYG1+nKGglIFvYV9tfp2ioZWBb2FebH6eo6KVgW5gXmx+n6SilYFuX11rfqClo5aBbV5ca36hpqSWgW1eW2p+oqekl4FsXVtqfqOopZeBbFxaaX6kqaaYgWtbWWl+pqqml4FrW1hofqerp5iBalpYaH6oq6iYgWpZV2d+qaypmIFpWFZnfqqtqpmBaVhWZn6rrqqZgWhXVWZ+rK+rmYFoVlRlfq2wrJqBZ1VUZX6usa2agWdVU2R+r7KtmoFmVFJkfrCzrpuBZlNSY36xtK+bgWVTUWN+srWvm4FlUlBifrO2sJyBZFFQYn60t7GcgWRRT2F+tbixnIFjUE5hfra5spyBY09OYH63urOdgWJPTWB+uLuznYFiTk1ffrm8tJ2BYU1MX367vbWegWFNS15+vL62noFgTEteflJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUg==">
+</audio>
+<script>
+const $ = s => document.querySelector(s);
+const money = c => "$" + (c/100).toFixed(2);
+let PIN = localStorage.getItem("pin") || "";
+let lastMaxId = 0;
+
+async function api(url, opt = {}) {
+  opt.headers = { "Content-Type": "application/json", "x-pin": PIN, ...(opt.headers||{}) };
+  const r = await fetch(url, opt);
+  if (r.status === 401) { showPin(); throw new Error("pin"); }
+  return r.json();
+}
+function showPin(){ $("#pinBox").style.display="block"; $("#list").style.display="none"; }
+async function tryPin(){
+  PIN = $("#pin").value;
+  const r = await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:PIN})}).then(r=>r.json());
+  if (r.ok){ localStorage.setItem("pin",PIN); $("#pinBox").style.display="none"; $("#list").style.display="grid"; load(); }
+  else alert("PIN incorrecto");
+}
+function ago(t){
+  const m = Math.floor((Date.now()-new Date(t).getTime())/60000);
+  return m<1 ? "ahora" : m+" min";
+}
+async function load(){
+  try {
+    const orders = await api("/api/orders?open=1");
+    const maxId = orders.reduce((m,o)=>Math.max(m,o.id),0);
+    if (lastMaxId && maxId > lastMaxId) { try { $("#ding").play(); } catch(e){} }
+    lastMaxId = Math.max(lastMaxId, maxId);
+    $("#list").innerHTML = orders.length ? orders.map(o => `
+      <div class="order ${o.status}">
+        <h2>#${o.number} <span class="status ${o.status}">${o.status==="pending"?"POR COBRAR":"PAGADO"}</span></h2>
+        <div class="when">${ago(o.createdAt)} · orden ${o.id}</div>
+        <table>${o.items.map(i=>`<tr><td>${i.qty} × ${i.itemName}</td><td>${money(i.lineTotalCents)}</td></tr>`).join("")}</table>
+        ${o.note?`<div style="background:#fff8e1;padding:6px 10px;border-radius:8px;font-size:14px">📝 ${o.note}</div>`:""}
+        <div class="tot">Total ${money(o.totalCents)}</div>
+        <div class="btns">
+          ${o.status==="pending"
+            ? `<button class="b-charge" onclick="setSt(${o.id},'charged')">💵 Cobrado</button>`
+            : `<button class="b-ready" onclick="setSt(${o.id},'done')">✅ Entregado</button>`}
+          <button class="b-cancel" onclick="if(confirm('¿Cancelar orden #${o.number}?'))setSt(${o.id},'cancelled')">✕</button>
+        </div>
+      </div>`).join("")
+    : `<div class="empty">Sin órdenes pendientes 🎉</div>`;
+  } catch(e){}
+}
+async function setSt(id, status){ await api("/api/orders/"+id,{method:"PUT",body:JSON.stringify({status})}); load(); }
+setInterval(()=>{ $("#clock").textContent = new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}); },1000);
+setInterval(()=>{ if($("#list").style.display!=="none") load(); },5000);
+if (PIN) tryPin(); else showPin();
+</script>
+</body>
+</html>

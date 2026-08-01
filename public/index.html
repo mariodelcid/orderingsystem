@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ordena Aquí</title>
+<style>
+  :root { --red:#d32f2f; --yellow:#ffb300; --bg:#fff8f0; --dark:#3e2723; --green:#2e7d32; }
+  * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; user-select:none; }
+  body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--dark); padding-bottom:110px; }
+  header { background:var(--red); color:#fff; padding:16px 20px; position:sticky; top:0; z-index:5;
+           display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:26px; }
+  header .hint { font-size:15px; opacity:.9 }
+  .promos { display:flex; gap:12px; overflow-x:auto; padding:14px 16px; }
+  .promo { min-width:250px; background:#fff; border:3px solid var(--yellow); border-radius:16px; padding:14px; cursor:pointer; }
+  .promo img { width:100%; height:120px; object-fit:cover; border-radius:10px; }
+  .promo .t { font-weight:800; font-size:18px; margin-top:6px; }
+  .promo .d { font-size:14px; color:#795548; }
+  .promo .p { margin-top:6px; font-size:20px; font-weight:800; color:var(--green); }
+  .old { text-decoration:line-through; color:#a1887f; font-size:15px; margin-right:8px; font-weight:400; }
+  .cat { padding:6px 16px; }
+  .cat h2 { font-size:20px; color:var(--red); margin:12px 0 8px; text-transform:capitalize; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+  .item { background:#fff; border-radius:14px; padding:12px; border:1px solid #efdfd2; text-align:center; cursor:pointer;
+          box-shadow:0 1px 3px rgba(0,0,0,.06); position:relative; }
+  .item img { width:100%; height:90px; object-fit:cover; border-radius:8px; margin-bottom:6px; }
+  .item .n { font-weight:700; font-size:15px; min-height:36px; display:flex; align-items:center; justify-content:center; }
+  .item .p { font-size:18px; font-weight:800; color:var(--green); margin-top:4px; }
+  .item .badge { position:absolute; top:8px; left:8px; background:var(--yellow); color:#4e342e; font-size:11px;
+                 font-weight:800; border-radius:99px; padding:3px 8px; z-index:1; }
+  .item .count { position:absolute; top:8px; right:8px; background:var(--red); color:#fff; min-width:26px; height:26px;
+                 border-radius:99px; display:none; align-items:center; justify-content:center; font-weight:800; z-index:1; }
+  #cartbar { position:fixed; bottom:0; left:0; right:0; background:var(--dark); color:#fff; padding:14px 18px;
+             display:flex; align-items:center; justify-content:space-between; gap:12px; z-index:10; }
+  #cartbar .tot { font-size:22px; font-weight:800; }
+  #cartbar button { border:none; border-radius:12px; padding:14px 22px; font-size:18px; font-weight:800; cursor:pointer; }
+  #btnClear { background:#6d4c41; color:#fff; }
+  #btnOrder { background:var(--yellow); color:#3e2723; }
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:20; }
+  .overlay.show { display:flex; }
+  .sheet { background:#fff; border-radius:20px; padding:24px; width:min(500px,94vw); max-height:88vh; overflow:auto; }
+  .sheet h3 { font-size:22px; margin-bottom:10px; }
+  .line { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee; gap:8px; }
+  .qtybtns { display:flex; gap:8px; align-items:center; }
+  .qtybtns button { width:42px; height:42px; border-radius:10px; border:none; background:#efebe9; font-size:20px; font-weight:800; cursor:pointer; }
+  .big { font-size:72px; font-weight:900; color:var(--red); text-align:center; }
+  .center { text-align:center; }
+  .go { background:var(--green); color:#fff; border:none; border-radius:12px; padding:16px 26px; font-size:19px; font-weight:800; cursor:pointer; width:100%; margin-top:14px; }
+  .go.gray { background:#efebe9; color:#3e2723; }
+  .upsell { display:flex; gap:10px; margin-top:10px; }
+  .upsell .item { flex:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="storeName">🌽 Elotes Locos</h1>
+  <div class="hint">Toca los productos para ordenar 👇</div>
+</header>
+<div class="promos" id="promos"></div>
+<div id="menu"></div>
+
+<div id="cartbar">
+  <div><span id="cartCount">0</span> artículos · <span class="tot" id="cartTotal">$0.00</span></div>
+  <div>
+    <button id="btnClear" onclick="clearCart()">Vaciar</button>
+    <button id="btnOrder" onclick="openCart()">Ver mi orden ✓</button>
+  </div>
+</div>
+
+<div class="overlay" id="cartModal">
+  <div class="sheet">
+    <h3>Tu orden</h3>
+    <div id="cartLines"></div>
+    <div class="line" style="border:none"><b>Total</b><b id="cartTotal2">$0.00</b></div>
+    <div id="upsellBox" style="display:none">
+      <h3 style="margin-top:12px">¿Se te antoja algo más? 😋</h3>
+      <div class="upsell" id="upsellItems"></div>
+    </div>
+    <button class="go" onclick="placeOrder()">Enviar orden 🚀</button>
+    <button class="go gray" onclick="closeCart()">Seguir viendo el menú</button>
+  </div>
+</div>
+
+<div class="overlay" id="doneModal">
+  <div class="sheet center">
+    <h3>¡Gracias! Tu número de orden es</h3>
+    <div class="big" id="orderNum">—</div>
+    <p style="font-size:19px;margin-top:8px">Pasa a la caja para <b>pagar</b> 💵<br>y espera que llamen tu número 😊</p>
+    <p style="color:#795548;margin-top:10px" id="countdown"></p>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const money = c => "$" + (c/100).toFixed(2);
+let MENU = [], CART = {};
+const esc = n => n.replaceAll("\\\\","\\\\\\\\").replaceAll("'","\\'");
+
+async function loadMenu() {
+  const r = await fetch("/api/kiosk/menu").then(r => r.json());
+  if (r.error) return;
+  MENU = r.items;
+  if (r.storeName) $("#storeName").textContent = "🌽 " + r.storeName;
+  const feats = MENU.filter(i => i.promo && i.promo.featured);
+  $("#promos").innerHTML = feats.map(i => `
+    <div class="promo" onclick="add('${esc(i.name)}')">
+      ${i.imageUrl ? `<img src="${i.imageUrl}">` : ""}
+      <div class="t">${i.promo.title}</div>
+      <div class="d">${i.promo.description || i.name}</div>
+      <div class="p"><span class="old">${money(i.priceCents)}</span>${money(i.promo.promoPriceCents)}</div>
+    </div>`).join("");
+  $("#promos").style.display = feats.length ? "flex" : "none";
+  const cats = {};
+  for (const i of MENU) (cats[i.category] ||= []).push(i);
+  const order = ["SNACKS","CHAMOYADAS","MILK SHAKES","REFRESHERS","Drinks"];
+  const names = Object.keys(cats).sort((a,b) =>
+    ((order.indexOf(a)+1 || 99)) - ((order.indexOf(b)+1 || 99)));
+  $("#menu").innerHTML = names.map(c => `
+    <div class="cat"><h2>${c.toLowerCase()}</h2><div class="grid">
+      ${cats[c].map(i => {
+        const price = i.promo ? i.promo.promoPriceCents : i.priceCents;
+        return `<div class="item" onclick="add('${esc(i.name)}')" id="it-${cssId(i.name)}">
+          ${i.promo ? `<div class="badge">OFERTA</div>` : ""}
+          <div class="count">0</div>
+          ${i.imageUrl ? `<img src="${i.imageUrl}">` : ""}
+          <div class="n">${i.name}</div>
+          <div class="p">${i.promo ? `<span class="old">${money(i.priceCents)}</span>` : ""}${money(price)}</div>
+        </div>`;
+      }).join("")}
+    </div></div>`).join("");
+  refresh();
+}
+function cssId(n){ return n.replace(/[^a-z0-9]/gi,"_"); }
+function unit(i){ return i.promo ? i.promo.promoPriceCents : i.priceCents; }
+function add(name){ CART[name]=(CART[name]||0)+1; refresh(); if($("#cartModal").classList.contains("show")) renderCartLines(); }
+function sub(name){ if(!CART[name])return; CART[name]--; if(CART[name]<=0)delete CART[name]; refresh(); renderCartLines(); }
+function clearCart(){ CART={}; refresh(); }
+function refresh(){
+  let n=0,t=0;
+  for (const i of MENU){
+    const q=CART[i.name]||0;
+    const el=document.querySelector(`#it-${cssId(i.name)} .count`);
+    if(el){ el.style.display=q?"flex":"none"; el.textContent=q; }
+    n+=q; t+=q*unit(i);
+  }
+  $("#cartCount").textContent=n;
+  $("#cartTotal").textContent=money(t);
+  $("#cartTotal2").textContent=money(t);
+}
+function renderCartLines(){
+  const rows=Object.entries(CART).map(([name,q])=>{
+    const i=MENU.find(x=>x.name===name); if(!i) return "";
+    return `<div class="line"><div><b>${name}</b><br><small>${money(unit(i))} c/u</small></div>
+      <div class="qtybtns"><button onclick="sub('${esc(name)}')">−</button><b>${q}</b>
+      <button onclick="add('${esc(name)}')">+</button>
+      <b style="min-width:64px;text-align:right">${money(q*unit(i))}</b></div></div>`;
+  });
+  $("#cartLines").innerHTML=rows.join("")||"<p>Tu orden está vacía</p>";
+  // upsell: featured promos or drinks not already in the cart
+  const sugg = MENU.filter(i => !CART[i.name] &&
+      (i.promo || ["REFRESHERS","Drinks","MILK SHAKES","CHAMOYADAS"].includes(i.category)))
+    .sort((a,b)=>(b.promo?1:0)-(a.promo?1:0)).slice(0,3);
+  $("#upsellBox").style.display = sugg.length ? "block":"none";
+  $("#upsellItems").innerHTML = sugg.map(i=>`
+    <div class="item" onclick="add('${esc(i.name)}')">
+      ${i.imageUrl?`<img src="${i.imageUrl}">`:""}
+      <div class="n">${i.name}</div>
+      <div class="p">${money(unit(i))}</div>
+    </div>`).join("");
+}
+function openCart(){ renderCartLines(); $("#cartModal").classList.add("show"); }
+function closeCart(){ $("#cartModal").classList.remove("show"); }
+async function placeOrder(){
+  const items=Object.entries(CART).map(([name,qty])=>({name,qty}));
+  if(!items.length) return;
+  const r=await fetch("/api/kiosk/orders",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({items})}).then(r=>r.json());
+  if(r.error){ alert(r.error); return; }
+  closeCart(); clearCart();
+  $("#orderNum").textContent="#"+r.number;
+  $("#doneModal").classList.add("show");
+  let s=15;
+  $("#countdown").textContent="";
+  const iv=setInterval(()=>{ s--; $("#countdown").textContent=`Esta pantalla se reinicia en ${s}s`;
+    if(s<=0){ clearInterval(iv); $("#doneModal").classList.remove("show"); } },1000);
+}
+loadMenu();
+setInterval(loadMenu, 5*60*1000);
+</script>
+</body>
+</html>
