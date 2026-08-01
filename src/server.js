@@ -74,6 +74,7 @@ app.get("/api/kiosk/menu", async (_req, res) => {
           name: i.name,
           category: i.category || "OTROS",
           priceCents: i.priceCents,
+          description: (info && info.description) || null,
           imageUrl: imageId ? `/api/images/${imageId}` : (i.imageUrl || null),
           promo: p ? {
             title: p.title,
@@ -167,6 +168,7 @@ app.get("/api/manage/items", async (_req, res) => {
         name: i.name, category: i.category, priceCents: i.priceCents,
         hidden: !!info.hidden,
         imageId: info.imageId || null,
+        description: info.description || null,
         hasPromo: !!promoByName[i.name]
       };
     }));
@@ -174,10 +176,11 @@ app.get("/api/manage/items", async (_req, res) => {
 });
 app.put("/api/manage/items", async (req, res) => {
   try {
-    const { itemName, hidden, imageId } = req.body;
+    const { itemName, hidden, imageId, description } = req.body;
     const data = {};
     if (hidden !== undefined) data.hidden = !!hidden;
     if (imageId !== undefined) data.imageId = imageId;
+    if (description !== undefined) data.description = String(description || "").slice(0, 500) || null;
     res.json(await prisma.itemInfo.upsert({
       where: { itemName },
       create: { itemName, ...data },
