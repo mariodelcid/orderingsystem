@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Ordena Aquí</title>
+<title>Chilero — Ordena Aquí</title>
 <style>
   :root { --red:#d32f2f; --yellow:#ffb300; --bg:#fff8f0; --dark:#3e2723; --green:#2e7d32; }
   * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; user-select:none; }
@@ -11,6 +11,8 @@
   header { background:var(--red); color:#fff; padding:16px 20px; position:sticky; top:0; z-index:5;
            display:flex; justify-content:space-between; align-items:center; }
   header h1 { font-size:26px; }
+  .logo { height:60px; width:auto; display:block; }
+  .logo .lw { font-family:Georgia,'Times New Roman',serif; font-size:104px; font-weight:700; fill:#fff; letter-spacing:1px; }
   header .hint { font-size:15px; opacity:.9 }
   .promos { display:flex; gap:12px; overflow-x:auto; padding:14px 16px; }
   .promo { min-width:250px; background:#fff; border:3px solid var(--yellow); border-radius:16px; padding:14px; cursor:pointer; }
@@ -66,7 +68,17 @@
 </head>
 <body>
 <header>
-  <h1 id="storeName">🌽 Elotes Locos</h1>
+  <svg class="logo" viewBox="0 0 470 150" aria-label="Chilero">
+      <text x="104" y="112" text-anchor="end" class="lw">Ch</text>
+      <g transform="translate(112 16)">
+        <path d="M20 30 C20 18 16 10 9 5" stroke="#3f7d20" stroke-width="7" stroke-linecap="round" fill="none"/>
+        <path d="M21 30 C12 26 7 18 9 9 C19 9 25 18 25 29 Z" fill="#4c9a2a"/>
+        <path d="M21 28 C33 30 38 42 37 58 C36 78 30 96 22 108 C19 112 12 111 12 105 C12 100 15 96 18 90 C24 78 27 64 26 51 C25 40 23 33 20 29 Z" fill="#e53935"/>
+        <path d="M28 42 C33 50 34 62 32 72" stroke="#ff8a7d" stroke-width="4" stroke-linecap="round" fill="none" opacity=".7"/>
+      </g>
+      <text x="160" y="112" class="lw">lero</text>
+      <rect x="106" y="128" width="262" height="5" rx="2.5" fill="#ffb300"/>
+    </svg>
   <div class="hint">Toca los productos para ordenar 👇</div>
 </header>
 <div class="promos" id="promos"></div>
@@ -130,7 +142,6 @@ async function loadMenu() {
   const r = await fetch("/api/kiosk/menu").then(r => r.json());
   if (r.error) return;
   MENU = r.items;
-  if (r.storeName) $("#storeName").textContent = "🌽 " + r.storeName;
   const feats = MENU.filter(i => i.promo && i.promo.featured);
   $("#promos").innerHTML = feats.map(i => `
     <div class="promo" onclick="openItem('${esc(i.name)}')">
