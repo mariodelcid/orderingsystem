@@ -44,10 +44,11 @@ model Promo {
 
 // Per-item extras managed here (photo, visibility) without touching the POS
 model ItemInfo {
-  id       Int     @id @default(autoincrement())
-  itemName String  @unique
-  imageId  Int?
-  hidden   Boolean @default(false)
+  id          Int     @id @default(autoincrement())
+  itemName    String  @unique
+  imageId     Int?
+  hidden      Boolean @default(false)
+  description String? // shown in the kiosk popup when the customer taps the item
 }
 
 // Uploaded pictures, stored in the database (survives redeploys)
