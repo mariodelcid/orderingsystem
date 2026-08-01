@@ -9,7 +9,7 @@ async function main() {
   });
   await prisma.setting.upsert({
     where: { key: "storeName" },
-    create: { key: "storeName", value: "Elotes Locos" },
+    create: { key: "storeName", value: "Chilero" },
     update: {}
   });
   // Hide POS bookkeeping items from the kiosk by default
