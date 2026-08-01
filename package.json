@@ -1,0 +1,19 @@
+{
+  "name": "orderingsystem",
+  "version": "1.0.0",
+  "description": "Kiosk ordering system for Elotes Locos (customer / dispatcher / manager)",
+  "main": "src/server.js",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "start": "npx prisma db push --accept-data-loss && node prisma/seed.js && node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}
