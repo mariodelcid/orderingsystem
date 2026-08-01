@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Customer orders placed on the kiosk tablet
+model KioskOrder {
+  id         Int              @id @default(autoincrement())
+  number     Int // order number shown to the customer (resets daily)
+  createdAt  DateTime         @default(now())
+  status     String           @default("pending") // pending -> charged -> ready -> done | cancelled
+  note       String?
+  totalCents Int              @default(0)
+  items      KioskOrderItem[]
+}
+
+model KioskOrderItem {
+  id             Int        @id @default(autoincrement())
+  orderId        Int
+  order          KioskOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemName       String // POS item name
+  qty            Int        @default(1)
+  priceCents     Int        @default(0) // unit price shown/charged (promo-aware)
+  lineTotalCents Int        @default(0)
+}
+
+// Manager-defined promotions shown on the kiosk
+model Promo {
+  id          Int     @id @default(autoincrement())
+  title       String
+  description String?
+  itemName    String // POS item this promo applies to
+  pctOff      Float? // % discount, OR
+  priceCents  Int? // fixed promo price in cents
+  imageId     Int?
+  featured    Boolean @default(true) // show in the top promo strip
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+}
+
+// Per-item extras managed here (photo, visibility) without touching the POS
+model ItemInfo {
+  id       Int     @id @default(autoincrement())
+  itemName String  @unique
+  imageId  Int?
+  hidden   Boolean @default(false)
+}
+
+// Uploaded pictures, stored in the database (survives redeploys)
+model Image {
+  id        Int      @id @default(autoincrement())
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
