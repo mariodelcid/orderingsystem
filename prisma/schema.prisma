@@ -12,9 +12,11 @@ model KioskOrder {
   id         Int              @id @default(autoincrement())
   number     Int // order number shown to the customer (resets daily)
   createdAt  DateTime         @default(now())
-  status     String           @default("pending") // pending -> charged -> ready -> done | cancelled
-  note       String?
-  totalCents Int              @default(0)
+  status        String           @default("pending") // pending -> charged -> ready -> done | cancelled
+  note          String?
+  totalCents    Int              @default(0)
+  paymentMethod String? // cash | credit (set when charged)
+  posSaleId     Int? // sale id created in the POS (texasstores)
   items      KioskOrderItem[]
 }
 
