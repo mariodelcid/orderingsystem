@@ -109,11 +109,12 @@ async function loadAll(){
   $("#itemTable").innerHTML = "<tr><th>Foto</th><th>Producto</th><th>Precio</th><th>Visible</th><th></th></tr>" +
     items.map(i=>`<tr>
       <td>${i.imageId?`<img class="thumb" src="/api/images/${i.imageId}">`:`<div class="nopic">sin foto</div>`}</td>
-      <td>${i.name} ${i.hasPromo?'<span class="pill on">PROMO</span>':""}</td>
+      <td>${i.name} ${i.hasPromo?'<span class="pill on">PROMO</span>':""}${i.description?'<br><span class="muted">'+i.description+'</span>':""}</td>
       <td>${money(i.priceCents)}</td>
       <td><span class="pill ${i.hidden?"off":"on"}">${i.hidden?"OCULTO":"VISIBLE"}</span></td>
       <td style="white-space:nowrap">
         <button onclick="pickImage('${i.name.replaceAll("'","\\'")}')">📷 Subir foto</button>
+        <button onclick="editDesc('${i.name.replaceAll("'","\\'")}')">✏️ Descripción</button>
         <button onclick="toggleHide('${i.name.replaceAll("'","\\'")}',${!i.hidden})">${i.hidden?"Mostrar":"Ocultar"}</button>
       </td></tr>`).join("");
   $("#promoTable").innerHTML = "<tr><th>Promo</th><th>Producto</th><th>Precio promo</th><th>Estado</th><th></th></tr>" +
@@ -152,6 +153,13 @@ async function addPromo(){
 }
 async function updPromo(id, data){ await api("/api/promos/"+id,{method:"PUT",body:JSON.stringify(data)}); loadAll(); }
 async function delPromo(id){ await api("/api/promos/"+id,{method:"DELETE"}); loadAll(); }
+async function editDesc(itemName){
+  const it = ITEMS.find(x=>x.name===itemName);
+  const d = prompt(`Descripción de "${itemName}" (la ve el cliente al tocar el producto):`, (it && it.description) || "");
+  if (d === null) return;
+  await api("/api/manage/items",{method:"PUT",body:JSON.stringify({itemName, description:d})});
+  loadAll();
+}
 async function toggleHide(itemName, hidden){ await api("/api/manage/items",{method:"PUT",body:JSON.stringify({itemName,hidden})}); loadAll(); }
 
 function pickImage(itemName){ pickTarget = itemName; $("#filePick").click(); }

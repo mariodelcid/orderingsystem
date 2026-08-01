@@ -50,6 +50,18 @@
   .go.gray { background:#efebe9; color:#3e2723; }
   .upsell { display:flex; gap:10px; margin-top:10px; }
   .upsell .item { flex:1; }
+  #itemModal .sheet { padding:0; overflow:hidden; }
+  #itemModal img.hero { width:100%; height:240px; object-fit:cover; display:block; }
+  #itemModal .body { padding:20px 22px 22px; }
+  #itemModal h3 { font-size:26px; margin-bottom:4px; }
+  #itemModal .desc { color:#6d4c41; font-size:16px; line-height:1.45; margin:8px 0 4px; }
+  #itemModal .price { font-size:26px; font-weight:900; color:var(--green); margin:10px 0; }
+  #itemModal .qtyrow { display:flex; align-items:center; justify-content:center; gap:18px; margin:12px 0 4px; }
+  #itemModal .qtyrow button { width:54px; height:54px; border-radius:14px; border:none; background:#efebe9; font-size:26px; font-weight:900; cursor:pointer; }
+  #itemModal .qtyrow b { font-size:30px; min-width:40px; text-align:center; }
+  #itemModal .close { position:absolute; top:10px; right:14px; background:rgba(0,0,0,.45); color:#fff; border:none;
+    width:42px; height:42px; border-radius:99px; font-size:20px; font-weight:900; cursor:pointer; z-index:2; }
+  #itemModal .wrap { position:relative; }
 </style>
 </head>
 <body>
@@ -65,6 +77,23 @@
   <div>
     <button id="btnClear" onclick="clearCart()">Vaciar</button>
     <button id="btnOrder" onclick="openCart()">Ver mi orden ✓</button>
+  </div>
+</div>
+
+<div class="overlay" id="itemModal" onclick="if(event.target===this)closeItem()">
+  <div class="sheet wrap">
+    <button class="close" onclick="closeItem()">✕</button>
+    <img class="hero" id="dImg" style="display:none">
+    <div class="body">
+      <h3 id="dName"></h3>
+      <div id="dPromo"></div>
+      <p class="desc" id="dDesc"></p>
+      <div class="price" id="dPrice"></div>
+      <div class="qtyrow">
+        <button onclick="dQty(-1)">−</button><b id="dQtyN">1</b><button onclick="dQty(1)">+</button>
+      </div>
+      <button class="go" id="dAdd" onclick="confirmItem()">Agregar a mi orden</button>
+    </div>
   </div>
 </div>
 
@@ -104,7 +133,7 @@ async function loadMenu() {
   if (r.storeName) $("#storeName").textContent = "🌽 " + r.storeName;
   const feats = MENU.filter(i => i.promo && i.promo.featured);
   $("#promos").innerHTML = feats.map(i => `
-    <div class="promo" onclick="add('${esc(i.name)}')">
+    <div class="promo" onclick="openItem('${esc(i.name)}')">
       ${i.imageUrl ? `<img src="${i.imageUrl}">` : ""}
       <div class="t">${i.promo.title}</div>
       <div class="d">${i.promo.description || i.name}</div>
@@ -120,7 +149,7 @@ async function loadMenu() {
     <div class="cat"><h2>${c.toLowerCase()}</h2><div class="grid">
       ${cats[c].map(i => {
         const price = i.promo ? i.promo.promoPriceCents : i.priceCents;
-        return `<div class="item" onclick="add('${esc(i.name)}')" id="it-${cssId(i.name)}">
+        return `<div class="item" onclick="openItem('${esc(i.name)}')" id="it-${cssId(i.name)}">
           ${i.promo ? `<div class="badge">OFERTA</div>` : ""}
           <div class="count">0</div>
           ${i.imageUrl ? `<img src="${i.imageUrl}">` : ""}
@@ -134,6 +163,28 @@ async function loadMenu() {
 function cssId(n){ return n.replace(/[^a-z0-9]/gi,"_"); }
 function unit(i){ return i.promo ? i.promo.promoPriceCents : i.priceCents; }
 function add(name){ CART[name]=(CART[name]||0)+1; refresh(); if($("#cartModal").classList.contains("show")) renderCartLines(); }
+let DETAIL = null, DQTY = 1;
+function openItem(name){
+  const i = MENU.find(x=>x.name===name); if(!i) return;
+  DETAIL = i; DQTY = 1;
+  $("#dQtyN").textContent = "1";
+  $("#dName").textContent = i.name;
+  $("#dImg").style.display = i.imageUrl ? "block" : "none";
+  if (i.imageUrl) $("#dImg").src = i.imageUrl;
+  $("#dPromo").innerHTML = i.promo ? `<span style="background:var(--yellow);color:#4e342e;font-weight:800;border-radius:99px;padding:4px 12px;font-size:13px">🎉 ${i.promo.title}</span>` : "";
+  $("#dDesc").textContent = i.description || (i.promo && i.promo.description) || "";
+  $("#dPrice").innerHTML = (i.promo ? `<span class="old">${money(i.priceCents)}</span>` : "") + money(unit(i));
+  updAddBtn();
+  $("#itemModal").classList.add("show");
+}
+function closeItem(){ $("#itemModal").classList.remove("show"); }
+function dQty(d){ DQTY = Math.max(1, Math.min(20, DQTY+d)); $("#dQtyN").textContent = DQTY; updAddBtn(); }
+function updAddBtn(){ $("#dAdd").textContent = `Agregar ${DQTY} · ${money(DQTY*unit(DETAIL))}`; }
+function confirmItem(){
+  CART[DETAIL.name] = (CART[DETAIL.name]||0) + DQTY;
+  refresh(); closeItem();
+  if($("#cartModal").classList.contains("show")) renderCartLines();
+}
 function sub(name){ if(!CART[name])return; CART[name]--; if(CART[name]<=0)delete CART[name]; refresh(); renderCartLines(); }
 function clearCart(){ CART={}; refresh(); }
 function refresh(){
