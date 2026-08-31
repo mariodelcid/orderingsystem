@@ -1,0 +1,128 @@
+From bf63f6fd779040c0aad8daf254fae83eb36db3da Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 31 Aug 2026 15:15:23 +0000
+Subject: [PATCH] Fix Agregar button clipped on mobile in item modal
+
+The item modal sheet used `overflow:hidden` with a `88vh` max-height. On
+phones this cut off the "Agregar" CTA with no way to scroll to it, since
+`vh` is measured against the address-bar-hidden viewport and the card
+extended under the browser toolbar. Items with longer descriptions (e.g.
+Cheetos) overflowed first, which is why only some products were affected.
+
+- Item modal sheet: overflow-y:auto instead of hidden
+- Add `max-height:88dvh` alongside `88vh` so sizing uses the visible area
+- Pin "Agregar" with position:sticky so it is always tappable
+- Pin "Enviar orden" in the cart modal, also below the fold with 4+ items
+- Shrink hero image and tighten spacing under `@media (max-height:720px)`
+- viewport-fit=cover + env(safe-area-inset-bottom) for the home indicator
+
+Verified headless at iPhone SE/14 (Safari and Chrome chrome heights),
+Galaxy S8, landscape, tablet, and the 1080x1920 kiosk view.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01E1AYUaS3HxSPKZF8bUmWAK
+---
+ public/index.html | 48 +++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 40 insertions(+), 8 deletions(-)
+
+diff --git a/public/index.html b/public/index.html
+index a97f2af..e7eed11 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -2,7 +2,7 @@
+ <html lang="es">
+ <head>
+ <meta charset="UTF-8">
+-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
++<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+ <title>Chilero — Ordena Aquí</title>
+ <style>
+   :root { --red:#d32f2f; --yellow:#ffb300; --bg:#fff8f0; --dark:#3e2723; --green:#2e7d32; }
+@@ -39,9 +39,12 @@
+   #cartbar button { border:none; border-radius:12px; padding:14px 22px; font-size:18px; font-weight:800; cursor:pointer; }
+   #btnClear { background:#6d4c41; color:#fff; }
+   #btnOrder { background:var(--yellow); color:#3e2723; }
+-  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:20; }
++  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:20;
++             padding:12px; }
+   .overlay.show { display:flex; }
+-  .sheet { background:#fff; border-radius:20px; padding:24px; width:min(500px,94vw); max-height:88vh; overflow:auto; }
++  .sheet { background:#fff; border-radius:20px; padding:24px; width:min(500px,94vw);
++           max-height:88vh; max-height:88dvh; overflow-y:auto; -webkit-overflow-scrolling:touch;
++           padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+   .sheet h3 { font-size:22px; margin-bottom:10px; }
+   .line { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee; gap:8px; }
+   .qtybtns { display:flex; gap:8px; align-items:center; }
+@@ -50,11 +53,23 @@
+   .center { text-align:center; }
+   .go { background:var(--green); color:#fff; border:none; border-radius:12px; padding:16px 26px; font-size:19px; font-weight:800; cursor:pointer; width:100%; margin-top:14px; }
+   .go.gray { background:#efebe9; color:#3e2723; }
++  /* keeps "Enviar orden" visible even with a long list of items */
++  #cartModal .actions { position:sticky; bottom:0; background:#fff; z-index:3;
++    margin:6px -24px calc(-24px - env(safe-area-inset-bottom));
++    padding:8px 24px calc(14px + env(safe-area-inset-bottom));
++    box-shadow:0 -10px 14px -6px rgba(255,255,255,.95); }
+   .upsell { display:flex; gap:10px; margin-top:10px; }
+   .upsell .item { flex:1; }
+-  #itemModal .sheet { padding:0; overflow:hidden; }
+-  #itemModal img.hero { width:100%; height:240px; object-fit:cover; display:block; }
++  /* scrollable, not clipped — the "Agregar" button must always be reachable */
++  #itemModal .sheet { padding:0; overflow-y:auto; }
++  #itemModal img.hero { width:100%; height:clamp(120px,26vh,240px); object-fit:cover; display:block; }
+   #itemModal .body { padding:20px 22px 22px; }
++  /* keeps the CTA pinned to the bottom of the sheet no matter how short the screen is */
++  #itemModal .addwrap { position:sticky; bottom:0; background:#fff; z-index:3;
++    margin:8px -22px -22px;
++    padding:10px 22px calc(14px + env(safe-area-inset-bottom));
++    box-shadow:0 -10px 14px -6px rgba(255,255,255,.95); }
++  #itemModal .addwrap .go { margin-top:0; }
+   #itemModal h3 { font-size:26px; margin-bottom:4px; }
+   #itemModal .desc { color:#6d4c41; font-size:16px; line-height:1.45; margin:8px 0 4px; }
+   #itemModal .price { font-size:26px; font-weight:900; color:var(--green); margin:10px 0; }
+@@ -64,6 +79,19 @@
+   #itemModal .close { position:absolute; top:10px; right:14px; background:rgba(0,0,0,.45); color:#fff; border:none;
+     width:42px; height:42px; border-radius:99px; font-size:20px; font-weight:900; cursor:pointer; z-index:2; }
+   #itemModal .wrap { position:relative; }
++  /* short phone screens: shrink the hero and tighten spacing so the whole card fits */
++  @media (max-height:720px) {
++    #itemModal img.hero { height:clamp(90px,16vh,140px); }
++    #itemModal .body { padding:14px 18px 16px; }
++    #itemModal h3 { font-size:22px; }
++    #itemModal .desc { font-size:15px; margin:6px 0 2px; }
++    #itemModal .price { font-size:22px; margin:6px 0; }
++    #itemModal .qtyrow { margin:8px 0 2px; gap:14px; }
++    #itemModal .qtyrow button { width:46px; height:46px; font-size:22px; }
++    #itemModal .qtyrow b { font-size:26px; }
++    #itemModal .addwrap { margin:6px -18px -16px; padding:8px 18px calc(10px + env(safe-area-inset-bottom)); }
++    #itemModal .go { padding:13px 20px; font-size:17px; }
++  }
+ </style>
+ </head>
+ <body>
+@@ -104,7 +132,9 @@
+       <div class="qtyrow">
+         <button onclick="dQty(-1)">−</button><b id="dQtyN">1</b><button onclick="dQty(1)">+</button>
+       </div>
+-      <button class="go" id="dAdd" onclick="confirmItem()">Agregar a mi orden</button>
++      <div class="addwrap">
++        <button class="go" id="dAdd" onclick="confirmItem()">Agregar a mi orden</button>
++      </div>
+     </div>
+   </div>
+ </div>
+@@ -118,8 +148,10 @@
+       <h3 style="margin-top:12px">¿Se te antoja algo más? 😋</h3>
+       <div class="upsell" id="upsellItems"></div>
+     </div>
+-    <button class="go" onclick="placeOrder()">Enviar orden 🚀</button>
+-    <button class="go gray" onclick="closeCart()">Seguir viendo el menú</button>
++    <div class="actions">
++      <button class="go" onclick="placeOrder()">Enviar orden 🚀</button>
++      <button class="go gray" onclick="closeCart()">Seguir viendo el menú</button>
++    </div>
+   </div>
+ </div>
+ 
+-- 
+2.43.0
+
