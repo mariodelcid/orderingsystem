@@ -53,6 +53,15 @@
   .center { text-align:center; }
   .go { background:var(--green); color:#fff; border:none; border-radius:12px; padding:16px 26px; font-size:19px; font-weight:800; cursor:pointer; width:100%; margin-top:14px; }
   .go.gray { background:#efebe9; color:#3e2723; }
+  .go.card { background:#1565c0; }
+  .go.cash { background:var(--green); }
+  .paylabel { text-align:center; font-weight:800; font-size:17px; margin:10px 0 0; color:#5d4037; }
+  .payrow { display:flex; gap:10px; }
+  .payrow .go { margin-top:8px; font-size:20px; padding:18px 10px; }
+  .smalllink { background:none; border:none; color:#8d6e63; font-size:15px; text-decoration:underline; margin-top:14px; cursor:pointer; }
+  .spinner { width:54px; height:54px; border:6px solid #e3f2fd; border-top-color:#1565c0; border-radius:50%;
+             margin:14px auto; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
   /* keeps "Enviar orden" visible even with a long list of items */
   #cartModal .actions { position:sticky; bottom:0; background:#fff; z-index:3;
     margin:6px -24px calc(-24px - env(safe-area-inset-bottom));
@@ -149,7 +158,11 @@
       <div class="upsell" id="upsellItems"></div>
     </div>
     <div class="actions">
-      <button class="go" onclick="placeOrder()">Enviar orden 🚀</button>
+      <p class="paylabel">¿Cómo quieres pagar?</p>
+      <div class="payrow">
+        <button class="go card" id="btnPayCard" onclick="placeOrder('card')">💳 Tarjeta</button>
+        <button class="go cash" onclick="placeOrder('cash')">💵 Efectivo</button>
+      </div>
       <button class="go gray" onclick="closeCart()">Seguir viendo el menú</button>
     </div>
   </div>
@@ -159,21 +172,47 @@
   <div class="sheet center">
     <h3>¡Gracias! Tu número de orden es</h3>
     <div class="big" id="orderNum">—</div>
-    <p style="font-size:19px;margin-top:8px">Pasa a la caja para <b>pagar</b> 💵<br>y espera que llamen tu número 😊</p>
+    <p style="font-size:19px;margin-top:8px" id="doneMsg"></p>
     <p style="color:#795548;margin-top:10px" id="countdown"></p>
+  </div>
+</div>
+
+<div class="overlay" id="cardModal">
+  <div class="sheet center">
+    <h3>Pago con tarjeta 💳</h3>
+    <div class="big" id="cardNum">—</div>
+    <p style="font-size:22px;font-weight:800;margin-top:4px">Total <span id="cardTotal"></span></p>
+    <div class="spinner"></div>
+    <p style="font-size:17px">Abriendo Square… sigue las instrucciones para pagar.</p>
+    <button class="go card" onclick="openSquare()">Abrir Square otra vez</button>
+    <button class="go gray" onclick="cardToCash()">Mejor pago en efectivo 💵</button>
+  </div>
+</div>
+
+<div class="overlay" id="failModal">
+  <div class="sheet center">
+    <h3>Pago no completado 😕</h3>
+    <p style="font-size:17px;margin:6px 0" id="failMsg">No se hizo ningún cargo a tu tarjeta.</p>
+    <p style="font-size:20px;font-weight:800">Orden <span id="failNum"></span> · <span id="failTotal"></span></p>
+    <button class="go card" onclick="openSquare()">💳 Intentar otra vez</button>
+    <button class="go cash" onclick="cardToCash()">💵 Pagar en efectivo</button>
+    <button class="smalllink" onclick="cancelCardOrder()">Cancelar orden</button>
   </div>
 </div>
 
 <script>
 const $ = s => document.querySelector(s);
 const money = c => "$" + (c/100).toFixed(2);
-let MENU = [], CART = {};
+let MENU = [], CART = {}, SQUARE_APP_ID = null;
+let CARD_ORDER = null; // { id, number, totalCents } while paying by card
 const esc = n => n.replaceAll("\\\\","\\\\\\\\").replaceAll("'","\\'");
 
 async function loadMenu() {
   const r = await fetch("/api/kiosk/menu").then(r => r.json());
   if (r.error) return;
   MENU = r.items;
+  SQUARE_APP_ID = r.squareAppId || null;
+  $("#btnPayCard").style.display = SQUARE_APP_ID ? "" : "none";
   const feats = MENU.filter(i => i.promo && i.promo.featured);
   $("#promos").innerHTML = feats.map(i => `
     <div class="promo" onclick="openItem('${esc(i.name)}')">
@@ -265,21 +304,118 @@ function renderCartLines(){
 }
 function openCart(){ renderCartLines(); $("#cartModal").classList.add("show"); }
 function closeCart(){ $("#cartModal").classList.remove("show"); }
-async function placeOrder(){
+async function placeOrder(paymentMethod){
   const items=Object.entries(CART).map(([name,qty])=>({name,qty}));
   if(!items.length) return;
+  if(paymentMethod==="card" && !SQUARE_APP_ID) paymentMethod="cash";
   const r=await fetch("/api/kiosk/orders",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({items})}).then(r=>r.json());
+    body:JSON.stringify({items, paymentMethod})}).then(r=>r.json()).catch(()=>({error:"Sin conexión, intenta otra vez"}));
   if(r.error){ alert(r.error); return; }
   closeCart(); clearCart();
-  $("#orderNum").textContent="#"+r.number;
-  $("#doneModal").classList.add("show");
-  let s=4;
-  $("#countdown").textContent="";
-  const iv=setInterval(()=>{ s--; $("#countdown").textContent=`Esta pantalla se reinicia en ${s}s`;
-    if(s<=0){ clearInterval(iv); $("#doneModal").classList.remove("show"); } },1000);
+  if(paymentMethod==="card"){
+    CARD_ORDER = { id:r.id, number:r.number, totalCents:r.totalCents };
+    saveCardOrder();
+    $("#cardNum").textContent="#"+r.number;
+    $("#cardTotal").textContent=money(r.totalCents);
+    $("#cardModal").classList.add("show");
+    openSquare();
+  } else {
+    showDone(r.number, "cash");
+  }
 }
-loadMenu();
+
+/* ---- Pantalla final (4 s y regresa al menú) ---- */
+let doneTimer=null;
+function showDone(number, kind){
+  ["cardModal","failModal"].forEach(id=>$("#"+id).classList.remove("show"));
+  $("#orderNum").textContent="#"+number;
+  $("#doneMsg").innerHTML = kind==="card"
+    ? `<b style="color:var(--green)">¡Pago con tarjeta aprobado! ✅</b><br>Espera que llamen tu número 😊`
+    : `Pasa a la caja para <b>pagar</b> 💵<br>y espera que llamen tu número 😊`;
+  $("#doneModal").classList.add("show");
+  let s=4;   // segundos antes de volver al menú para la siguiente orden
+  $("#countdown").textContent=`Esta pantalla se reinicia en ${s}s`;
+  clearInterval(doneTimer);
+  doneTimer=setInterval(()=>{ s--; $("#countdown").textContent=`Esta pantalla se reinicia en ${s}s`;
+    if(s<=0){ clearInterval(doneTimer); $("#doneModal").classList.remove("show"); } },1000);
+}
+
+/* ---- Square Point of Sale (Android) ---- */
+function saveCardOrder(){ try{ localStorage.setItem("cardOrder", JSON.stringify(CARD_ORDER)); }catch(e){} }
+function loadCardOrder(){ try{ return JSON.parse(localStorage.getItem("cardOrder")||"null"); }catch(e){ return null; } }
+function clearCardOrder(){ CARD_ORDER=null; try{ localStorage.removeItem("cardOrder"); }catch(e){} }
+function openSquare(){
+  if(!CARD_ORDER || !SQUARE_APP_ID) return;
+  $("#failModal").classList.remove("show");
+  $("#cardModal").classList.add("show");
+  const cb = location.origin + "/square-callback";
+  const fallback = cb + "?com.squareup.pos.ERROR_CODE=com.squareup.pos.ERROR_SQUARE_APP_NOT_INSTALLED"
+                      + "&com.squareup.pos.REQUEST_METADATA=" + CARD_ORDER.id;
+  const url = "intent:#Intent;" +
+    "action=com.squareup.pos.action.CHARGE;" +
+    "package=com.squareup;" +
+    "S.com.squareup.pos.WEB_CALLBACK_URI=" + encodeURIComponent(cb) + ";" +
+    "S.com.squareup.pos.CLIENT_ID=" + encodeURIComponent(SQUARE_APP_ID) + ";" +
+    "S.com.squareup.pos.API_VERSION=v2.0;" +
+    "i.com.squareup.pos.TOTAL_AMOUNT=" + CARD_ORDER.totalCents + ";" +
+    "S.com.squareup.pos.CURRENCY_CODE=USD;" +
+    "S.com.squareup.pos.TENDER_TYPES=com.squareup.pos.TENDER_CARD;" +
+    "S.com.squareup.pos.NOTE=" + encodeURIComponent("Kiosco orden #" + CARD_ORDER.number) + ";" +
+    "S.com.squareup.pos.REQUEST_METADATA=" + CARD_ORDER.id + ";" +
+    "l.com.squareup.pos.AUTO_RETURN_TIMEOUT_MS=3200;" +
+    "S.browser_fallback_url=" + encodeURIComponent(fallback) + ";" +
+    "end";
+  window.location.href = url;
+}
+const SQUARE_ERRORS = {
+  "com.squareup.pos.ERROR_TRANSACTION_CANCELED": "Se canceló el pago. No se hizo ningún cargo.",
+  "com.squareup.pos.ERROR_SQUARE_APP_NOT_INSTALLED": "La app de Square no está instalada en esta tableta.",
+  "com.squareup.pos.ERROR_USER_NOT_LOGGED_IN": "Square no tiene la sesión iniciada. Avisa al personal.",
+  "com.squareup.pos.ERROR_UNAUTHORIZED_CLIENT_ID": "Square no reconoce este kiosco (Application ID). Avisa al personal.",
+  "com.squareup.pos.ERROR_INVALID_REQUEST": "Square rechazó la solicitud de pago. Avisa al personal.",
+  "com.squareup.pos.ERROR_ILLEGAL_CLIENT_ID": "Square no reconoce este kiosco (Application ID). Avisa al personal."
+};
+async function handleSquareReturn(){
+  const q = new URLSearchParams(location.search);
+  history.replaceState(null, "", "/");
+  const saved = loadCardOrder();
+  const metaId = +q.get("com.squareup.pos.REQUEST_METADATA") || (saved && saved.id);
+  if(!metaId) return;
+  const st = await fetch("/api/kiosk/orders/"+metaId).then(r=>r.json()).catch(()=>null);
+  if(!st || st.error) { clearCardOrder(); return; }
+  CARD_ORDER = { id: st.id, number: st.number, totalCents: st.totalCents };
+  const txId = q.get("com.squareup.pos.SERVER_TRANSACTION_ID") || q.get("com.squareup.pos.CLIENT_TRANSACTION_ID");
+  const err = q.get("com.squareup.pos.ERROR_CODE");
+  if (st.status === "charged") { clearCardOrder(); showDone(st.number, "card"); return; }
+  if (st.status !== "awaiting_card") { clearCardOrder(); return; }
+  if (txId && !err) {
+    const r = await fetch(`/api/kiosk/orders/${st.id}/card-paid`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({transactionId:txId})}).then(r=>r.json()).catch(()=>({error:"net"}));
+    if (!r.error) { clearCardOrder(); showDone(st.number, "card"); return; }
+  }
+  showFail(err);
+}
+function showFail(err){
+  $("#cardModal").classList.remove("show");
+  $("#failMsg").textContent = SQUARE_ERRORS[err] || "No se completó el pago. No se hizo ningún cargo.";
+  $("#failNum").textContent = "#"+CARD_ORDER.number;
+  $("#failTotal").textContent = money(CARD_ORDER.totalCents);
+  $("#failModal").classList.add("show");
+}
+async function cardToCash(){
+  if(!CARD_ORDER) return;
+  const r = await fetch(`/api/kiosk/orders/${CARD_ORDER.id}/to-cash`,{method:"POST"}).then(r=>r.json()).catch(()=>({error:"Sin conexión"}));
+  if(r.error){ alert(r.error); return; }
+  const n = CARD_ORDER.number; clearCardOrder(); showDone(n, "cash");
+}
+async function cancelCardOrder(){
+  if(!CARD_ORDER) return;
+  if(!confirm("¿Cancelar tu orden?")) return;
+  await fetch(`/api/kiosk/orders/${CARD_ORDER.id}/cancel`,{method:"POST"}).catch(()=>{});
+  clearCardOrder();
+  $("#failModal").classList.remove("show"); $("#cardModal").classList.remove("show");
+}
+loadMenu().then(() => { if (location.pathname === "/square-callback") handleSquareReturn(); });
 setInterval(loadMenu, 5*60*1000);
 </script>
 </body>
