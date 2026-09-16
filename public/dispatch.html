@@ -88,7 +88,7 @@
 const $ = s => document.querySelector(s);
 const money = c => "$" + (c/100).toFixed(2);
 let PIN = localStorage.getItem("pin") || "";
-let lastMaxId = 0;
+let SEEN = null; // order ids already shown (beep only for new ones)
 let ORDERS = [];
 const CHARGE_AUTO_CLOSE_MS = 12000;   // 0 = solo cierra al tocar
 
@@ -113,13 +113,14 @@ async function load(){
   try {
     const orders = await api("/api/orders?open=1");
     ORDERS = orders;
-    const maxId = orders.reduce((m,o)=>Math.max(m,o.id),0);
-    if (lastMaxId && maxId > lastMaxId) { try { $("#ding").play(); } catch(e){} }
-    lastMaxId = Math.max(lastMaxId, maxId);
+    const ids = orders.map(o=>o.id);
+    if (SEEN && ids.some(id=>!SEEN.has(id))) { try { $("#ding").play(); } catch(e){} }
+    SEEN = new Set([...(SEEN||[]), ...ids]);
     $("#list").innerHTML = orders.length ? orders.map(o => `
       <div class="order ${o.status}">
         <h2>#${o.number} <span class="status ${o.status}">${o.status==="pending"?"POR COBRAR":"PAGADO"+(o.paymentMethod==="credit"?" 💳":o.paymentMethod==="cash"?" 💵":"")}</span></h2>
-        <div class="when">${ago(o.createdAt)} · orden ${o.id}</div>
+        <div class="when">${ago(o.createdAt)} · orden ${o.id}${o.squareTxId?" · pagó en kiosco (Square)":""}</div>
+        ${o.posError?`<div style="background:#ffebee;color:#b71c1c;padding:6px 10px;border-radius:8px;font-size:13px;margin-bottom:6px">⚠️ Pagado con tarjeta, pero NO se registró en el POS: ${o.posError}. Regístralo a mano.</div>`:""}
         <table>${o.items.map(i=>`<tr><td>${i.qty} × ${i.itemName}</td><td>${money(i.lineTotalCents)}</td></tr>`).join("")}</table>
         ${o.note?`<div style="background:#fff8e1;padding:6px 10px;border-radius:8px;font-size:14px">📝 ${o.note}</div>`:""}
         <div class="tot">Total ${money(o.totalCents)}</div>
