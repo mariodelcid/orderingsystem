@@ -274,7 +274,7 @@ async function placeOrder(){
   closeCart(); clearCart();
   $("#orderNum").textContent="#"+r.number;
   $("#doneModal").classList.add("show");
-  let s=15;
+  let s=4;
   $("#countdown").textContent="";
   const iv=setInterval(()=>{ s--; $("#countdown").textContent=`Esta pantalla se reinicia en ${s}s`;
     if(s<=0){ clearInterval(iv); $("#doneModal").classList.remove("show"); } },1000);
