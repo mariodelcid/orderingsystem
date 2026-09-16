@@ -85,8 +85,13 @@
     <div class="row">
       <label>PIN de empleados/admin: <input id="setPin" maxlength="8" style="width:100px"></label>
       <label>Nombre del negocio: <input id="setName" style="width:200px"></label>
+    </div>
+    <div class="row">
+      <label>Square Application ID: <input id="setSquare" placeholder="sq0idp-..." style="width:260px"></label>
       <button class="primary" onclick="saveSettings()">Guardar</button>
     </div>
+    <p class="muted">Con el Application ID, el kiosco muestra el botón 💳 Tarjeta y abre la app de Square en la tableta. Déjalo vacío para aceptar solo efectivo.<br>
+      En developer.squareup.com → tu app → Point of Sale API, registra este Web Callback URL: <b id="cbUrl"></b></p>
   </div>
 </main>
 
@@ -148,6 +153,8 @@ async function loadAll(){
     }).join("") : "<tr><td colspan=5 class='muted'>Sin promociones. Crea la primera arriba 👆</td></tr>");
   $("#setPin").value = settings.adminPin || "";
   $("#setName").value = settings.storeName || "";
+  $("#setSquare").value = settings.squareAppId || "";
+  $("#cbUrl").textContent = location.origin + "/square-callback";
 }
 
 async function addPromo(){
@@ -200,7 +207,7 @@ function resize(file, max){
 async function saveSettings(){
   const pin = $("#setPin").value.trim();
   if (pin.length < 4) return alert("El PIN debe tener al menos 4 dígitos");
-  await api("/api/settings",{method:"PUT",body:JSON.stringify({adminPin:pin, storeName:$("#setName").value.trim()})});
+  await api("/api/settings",{method:"PUT",body:JSON.stringify({adminPin:pin, storeName:$("#setName").value.trim(), squareAppId:$("#setSquare").value.trim()})});
   localStorage.setItem("pin", pin); PIN = pin;
   alert("Guardado");
 }

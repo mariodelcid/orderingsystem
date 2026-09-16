@@ -12,11 +12,13 @@ model KioskOrder {
   id         Int              @id @default(autoincrement())
   number     Int // order number shown to the customer (resets daily)
   createdAt  DateTime         @default(now())
-  status        String           @default("pending") // pending -> charged -> ready -> done | cancelled
+  status        String           @default("pending") // pending (cash, at dispatch) | awaiting_card (kiosk, in Square) -> charged -> done | cancelled
   note          String?
   totalCents    Int              @default(0)
   paymentMethod String? // cash | credit (set when charged)
   posSaleId     Int? // sale id created in the POS (texasstores)
+  posError      String? // set if the card was paid in Square but recording the sale in the POS failed
+  squareTxId    String? // Square transaction id for card payments made at the kiosk
   items      KioskOrderItem[]
 }
 

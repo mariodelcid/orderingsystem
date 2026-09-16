@@ -85,7 +85,8 @@ app.get("/api/kiosk/menu", async (_req, res) => {
         };
       });
     const storeName = (await prisma.setting.findUnique({ where: { key: "storeName" } }))?.value || "Elotes Locos";
-    res.json({ storeName, items: menu });
+    const squareAppId = (await prisma.setting.findUnique({ where: { key: "squareAppId" } }))?.value || null;
+    res.json({ storeName, squareAppId, items: menu });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -110,9 +111,11 @@ app.post("/api/kiosk/orders", async (req, res) => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
     const startOfDay = new Date(`${today}T00:00:00-05:00`);
     const countToday = await prisma.kioskOrder.count({ where: { createdAt: { gte: startOfDay } } });
+    const payCard = req.body.paymentMethod === "card";
     const order = await prisma.kioskOrder.create({
       data: {
         number: countToday + 1,
+        status: payCard ? "awaiting_card" : "pending",
         note: String(req.body.note || "").slice(0, 200) || null,
         totalCents: total,
         items: { create: lines }
@@ -126,7 +129,7 @@ app.post("/api/kiosk/orders", async (req, res) => {
 app.get("/api/kiosk/orders/:id", async (req, res) => {
   const o = await prisma.kioskOrder.findUnique({ where: { id: +req.params.id } });
   if (!o) return res.status(404).json({ error: "Not found" });
-  res.json({ id: o.id, number: o.number, status: o.status, totalCents: o.totalCents });
+  res.json({ id: o.id, number: o.number, status: o.status, totalCents: o.totalCents, paymentMethod: o.paymentMethod });
 });
 
 // Serve uploaded images (public, cached)
@@ -149,10 +152,43 @@ app.get("/api/orders", async (req, res) => {
   }));
 });
 
-// Charge an order: records the sale in the POS (texasstores) exactly once,
-// which deducts POS stock and feeds all downstream reports automatically.
-// If kiosk promos made the total lower than POS prices, "Discount" units
-// (negative price in the POS) are added so the recorded total matches.
+// Record a sale in the POS (texasstores) for an order. Deducts POS stock and feeds
+// downstream reports. If kiosk promos made the total lower than POS prices,
+// "Discount" units (negative price in the POS) are added so the recorded total matches.
+// Returns { saleId, totalCents } or throws with a readable message.
+async function recordPosSale(order, pm) {
+  const posItems = await fetchPosItems();
+  const byName = Object.fromEntries(posItems.map(i => [i.name, i]));
+  const items = [];
+  let posTotal = 0;
+  for (const li of order.items) {
+    const it = byName[li.itemName];
+    if (!it) throw new Error(`"${li.itemName}" no existe en el POS`);
+    items.push({ itemId: it.id, quantity: li.qty });
+    posTotal += it.priceCents * li.qty;
+  }
+  const disc = byName["Discount"];
+  const diff = posTotal - order.totalCents;
+  let discountCents = 0;
+  if (diff > 0 && disc && disc.priceCents < 0) {
+    const n = Math.round(diff / Math.abs(disc.priceCents));
+    if (n > 0) { items.push({ itemId: disc.id, quantity: n }); discountCents = n * Math.abs(disc.priceCents); }
+  }
+  const expectedTotal = posTotal - discountCents;
+  const body = { items, paymentMethod: pm };
+  // the POS requires the tendered amount for cash sales (exact cash -> no change)
+  if (pm === "cash") body.amountTenderedCents = expectedTotal;
+  const r = await fetch(`${POS_URL}/api/sales`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `POS error ${r.status}`);
+  return { saleId: j.saleId ?? null, totalCents: j.totalCents ?? null };
+}
+
+// Dispatcher charges a cash (pending) order
 app.post("/api/orders/:id/charge", async (req, res) => {
   try {
     const pm = req.body.paymentMethod === "credit" ? "credit" : "cash";
@@ -162,46 +198,67 @@ app.post("/api/orders/:id/charge", async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
     if (order.status !== "pending")
       return res.status(400).json({ error: `Order already ${order.status}` });
-
-    const posItems = await fetchPosItems();
-    const byName = Object.fromEntries(posItems.map(i => [i.name, i]));
-    const items = [];
-    let posTotal = 0;
-    for (const li of order.items) {
-      const it = byName[li.itemName];
-      if (!it) return res.status(400).json({ error: `"${li.itemName}" no existe en el POS` });
-      items.push({ itemId: it.id, quantity: li.qty });
-      posTotal += it.priceCents * li.qty;
-    }
-    // offset promo discounts with the POS "Discount" item
-    const disc = byName["Discount"];
-    const diff = posTotal - order.totalCents;
-    let discountCents = 0;
-    if (diff > 0 && disc && disc.priceCents < 0) {
-      const n = Math.round(diff / Math.abs(disc.priceCents));
-      if (n > 0) { items.push({ itemId: disc.id, quantity: n }); discountCents = n * Math.abs(disc.priceCents); }
-    }
-    const expectedTotal = posTotal - discountCents;
-
-    const body = { items, paymentMethod: pm };
-    // the POS requires the tendered amount for cash sales (exact cash -> no change)
-    if (pm === "cash") body.amountTenderedCents = expectedTotal;
-
-    const r = await fetch(`${POS_URL}/api/sales`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) return res.status(502).json({ error: j.error || `POS error ${r.status}` });
-
+    let sale;
+    try { sale = await recordPosSale(order, pm); }
+    catch (e) { return res.status(502).json({ error: e.message }); }
     const upd = await prisma.kioskOrder.update({
       where: { id: order.id },
-      data: { status: "charged", paymentMethod: pm, posSaleId: j.saleId ?? null }
+      data: { status: "charged", paymentMethod: pm, posSaleId: sale.saleId }
     });
-    res.json({ ok: true, posSaleId: j.saleId ?? null, posTotalCents: j.totalCents ?? null, order: upd });
+    res.json({ ok: true, posSaleId: sale.saleId, posTotalCents: sale.totalCents, order: upd });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ---------------- kiosk card payments (Square Point of Sale app) ----------------
+// Square app returned a successful card payment for an awaiting_card order.
+app.post("/api/kiosk/orders/:id/card-paid", async (req, res) => {
+  try {
+    const txId = String(req.body.transactionId || "").slice(0, 100);
+    if (!txId) return res.status(400).json({ error: "Missing transaction id" });
+    const order = await prisma.kioskOrder.findUnique({
+      where: { id: +req.params.id }, include: { items: true }
+    });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status === "charged" && order.squareTxId === txId)
+      return res.json({ ok: true, number: order.number, totalCents: order.totalCents }); // callback reloaded
+    if (order.status !== "awaiting_card")
+      return res.status(400).json({ error: `Order already ${order.status}` });
+    // The customer already paid in Square: the order must reach dispatch even if the POS is down.
+    let sale = { saleId: null }, posError = null;
+    try { sale = await recordPosSale(order, "credit"); }
+    catch (e) { posError = e.message.slice(0, 200); console.error("POS record failed for card order", order.id, e.message); }
+    const upd = await prisma.kioskOrder.update({
+      where: { id: order.id },
+      data: { status: "charged", paymentMethod: "credit", squareTxId: txId, posSaleId: sale.saleId, posError }
+    });
+    res.json({ ok: true, number: upd.number, totalCents: upd.totalCents });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Customer gave up on the card and will pay cash at the counter.
+app.post("/api/kiosk/orders/:id/to-cash", async (req, res) => {
+  try {
+    const order = await prisma.kioskOrder.findUnique({ where: { id: +req.params.id } });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status !== "awaiting_card") return res.status(400).json({ error: `Order already ${order.status}` });
+    const upd = await prisma.kioskOrder.update({ where: { id: order.id }, data: { status: "pending" } });
+    res.json({ ok: true, number: upd.number, totalCents: upd.totalCents });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Customer cancelled an unpaid card order at the kiosk.
+app.post("/api/kiosk/orders/:id/cancel", async (req, res) => {
+  try {
+    const order = await prisma.kioskOrder.findUnique({ where: { id: +req.params.id } });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status !== "awaiting_card") return res.status(400).json({ error: `Order already ${order.status}` });
+    await prisma.kioskOrder.update({ where: { id: order.id }, data: { status: "cancelled" } });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Square sends the customer back here after the payment; the kiosk page reads the result.
+app.get("/square-callback", (_req, res) => res.sendFile(path.join(__dirname, "..", "public", "index.html")));
 
 app.put("/api/orders/:id", async (req, res) => {
   try {
@@ -296,6 +353,10 @@ app.put("/api/settings", async (req, res) => {
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
+
+// Short links: /dispatch and /manage work without ".html"
+app.get("/dispatch", (_req, res) => res.redirect("/dispatch.html"));
+app.get("/manage", (_req, res) => res.redirect("/manage.html"));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`));
