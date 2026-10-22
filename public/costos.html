@@ -221,7 +221,7 @@ async function loadDaily() {
   }
   $("#dailyTable").innerHTML = h;
   $("#dailyWarn").textContent = t.unmappedRevenueCents
-    ? `⚠ ${money(t.unmappedRevenueCents)} of revenue is from unmapped POS items (not counted in profit). Map them in "POS Mapping".` : "";
+    ? `⚠ ${money(t.unmappedRevenueCents)} of revenue is from unmapped items (not counted in profit). Map them in "Item Mapping".` : "";
 }
 
 // ---- History ----
