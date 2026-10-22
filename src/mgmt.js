@@ -279,6 +279,75 @@ module.exports = function mgmt(prisma, { TZ, fetchPosItems }) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // Usage of one ingredient (from sales x BOM) since a moment in time
+  async function usageSince(ingredientId, since) {
+    const bl = await prisma.bomLine.findMany({ where: { ingredientId } });
+    if (!bl.length) return 0;
+    const qtyPerProduct = {};
+    for (const l of bl) qtyPerProduct[l.productId] = (qtyPerProduct[l.productId] || 0) + l.quantity;
+    const maps = (await prisma.posMap.findMany({ where: { kind: "product" } })).filter(m => qtyPerProduct[m.productId] != null);
+    const perName = Object.fromEntries(maps.map(m => [m.posName, qtyPerProduct[m.productId]]));
+    const t = new Date(since).getTime();
+    let used = 0;
+    for (const s of await getAllSales()) {
+      if (new Date(s.createdAt).getTime() <= t) continue;
+      for (const li of s.items) if (perName[li.item.name] != null) used += perName[li.item.name] * (li.quantity || 0);
+    }
+    return used;
+  }
+  async function estStock(g) {
+    if (g.stockOnHand == null || !g.countedAt) return null;
+    return g.stockOnHand - await usageSince(g.id, g.countedAt);
+  }
+
+  // Replenish: add a delivery to the estimated stock (optionally update the purchase price -> cost per unit)
+  r.post("/ingredients/:id/receive", async (req, res) => {
+    try {
+      const g = await prisma.ingredient.findUnique({ where: { id: +req.params.id } });
+      if (!g) return res.status(404).json({ error: "Ingredient not found" });
+      const qty = +req.body.qty;
+      if (!(qty > 0)) return res.status(400).json({ error: "Quantity must be more than 0" });
+      const before = await estStock(g);
+      const stockAfter = +(((before ?? 0)) + qty).toFixed(4);
+      const data = { stockOnHand: stockAfter, countedAt: new Date() };
+      const price = req.body.pricePerPU;
+      if (price !== undefined && price !== null && price !== "" && +price >= 0) {
+        data.pricePerPU = +price;
+        if (g.purchaseUnits > 0) data.costPerUnit = +(+price / g.purchaseUnits).toFixed(4);
+      }
+      const upd = await prisma.ingredient.update({ where: { id: g.id }, data });
+      await prisma.inventoryMove.create({ data: {
+        ingredientId: g.id, kind: "receive", qty, stockAfter, costPerUnit: upd.costPerUnit, note: req.body.note ? String(req.body.note).slice(0, 200) : null
+      } });
+      res.json({ ok: true, before, stockAfter, costPerUnit: upd.costPerUnit });
+    } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  // Physical count: sets the stock to what is actually on the shelf
+  r.post("/ingredients/:id/count", async (req, res) => {
+    try {
+      const qty = +req.body.qty;
+      if (!(qty >= 0)) return res.status(400).json({ error: "Invalid count" });
+      const g = await prisma.ingredient.update({ where: { id: +req.params.id }, data: { stockOnHand: qty, countedAt: new Date() } });
+      await prisma.inventoryMove.create({ data: { ingredientId: g.id, kind: "count", qty, stockAfter: qty } });
+      res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  r.get("/moves", async (_req, res) => {
+    const moves = await prisma.inventoryMove.findMany({ orderBy: { id: "desc" }, take: 50 });
+    const ings = Object.fromEntries((await prisma.ingredient.findMany()).map(i => [i.id, i]));
+    res.json(moves.map(m => ({ ...m, code: ings[m.ingredientId]?.code, name: ings[m.ingredientId]?.name, unit: ings[m.ingredientId]?.unit })));
+  });
+
+  // Change the owner PIN
+  r.put("/owner-pin", async (req, res) => {
+    const pin = String(req.body.pin || "");
+    if (!/^\d{4,8}$/.test(pin)) return res.status(400).json({ error: "PIN must be 4 to 8 digits" });
+    const admin = await prisma.setting.findUnique({ where: { key: "adminPin" } });
+    if (pin === (admin ? admin.value : "2026")) return res.status(400).json({ error: "Use a different PIN than the admin PIN" });
+    await prisma.setting.upsert({ where: { key: "ownerPin" }, create: { key: "ownerPin", value: pin }, update: { value: pin } });
+    res.json({ ok: true });
+  });
+
   // ---------- weekly / monthly report ----------
   r.get("/report", async (req, res) => {
     try {

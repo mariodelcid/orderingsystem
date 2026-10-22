@@ -117,7 +117,7 @@
       <text x="196" y="112" class="lw">lero</text>
       <rect x="6" y="128" width="410" height="5" rx="2.5" fill="#ffb300"/>
     </svg><h1>Ventas</h1></div>
-  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/costos.html">Costos</a><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
+  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
 </header>
 
 <div id="pinBox">
@@ -130,7 +130,6 @@
 <nav class="tabs">
   <button data-t="res" class="on" onclick="tab('res')">📊 Resumen</button>
   <button data-t="caja" onclick="tab('caja')">🧾 Caja</button>
-  <button data-t="cost" onclick="tab('cost')">💲 Costos</button>
 </nav>
 <main>
 
@@ -157,7 +156,6 @@
     </div>
 
     <h2>Por producto</h2>
-    <p class="muted" id="costNote"></p>
     <div class="scroll"><table id="byItem"></table></div>
 
     <h2>Transacciones</h2>
@@ -189,11 +187,6 @@
     </div>
   </section>
 
-  <!-- ============ COSTOS ============ -->
-  <section class="pane" id="p-cost">
-    <p class="muted">El costo sale de la receta (BOM) en <a href="/costos.html">Costos y Ganancias</a>. Solo los productos sin receta usan el costo que escribas aquí. Los cambios aplican a ventas nuevas.</p>
-    <div class="scroll"><table id="costs" style="margin-top:10px"></table></div>
-  </section>
 </main>
 </div>
 
@@ -232,7 +225,6 @@ function tab(t){
   document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "p-" + t));
   drawCart();
   if (t === "res") load();
-  if (t === "cost") loadCosts();
 }
 
 /* ---------- fechas (hora de Texas) ---------- */
@@ -262,14 +254,11 @@ async function load(){
   try { REPORT = await api(`/api/sales/report?from=${RANGE.from}&to=${RANGE.to}`); } catch(e){ return; }
   const t = REPORT.totals;
   const avg = t.count ? Math.round(t.net / t.count) : 0;
-  const hasCost = t.cost > 0;
   $("#kpis").innerHTML = `
     <div class="kpi big"><div class="v">${money(t.net)}</div><div class="l">Venta neta · ${t.count} ${t.count===1?"venta":"ventas"} · ${t.items} productos</div></div>
     <div class="kpi cash"><div class="v">${money(t.cash)}</div><div class="l">💵 Efectivo (${t.cashCount})</div></div>
     <div class="kpi card"><div class="v">${money(t.card)}</div><div class="l">💳 Tarjeta (${t.cardCount})</div></div>
     <div class="kpi"><div class="v">${money(avg)}</div><div class="l">Ticket promedio</div></div>
-    <div class="kpi"><div class="v">${hasCost ? money(t.profit) : "—"}</div><div class="l">Ganancia${hasCost && t.net ? " · " + Math.round(t.profit/t.net*100) + "%" : ""}</div></div>
-    <div class="kpi"><div class="v">${hasCost ? money(t.cost) : "—"}</div><div class="l">Costo de producto</div></div>
     <div class="kpi"><div class="v">${money(t.discounts)}</div><div class="l">Descuentos (promos)</div></div>
     <div class="kpi"><div class="v">${t.voidedCount}</div><div class="l">Anuladas (${money(t.voidedCents)})</div></div>`;
 
@@ -282,13 +271,12 @@ async function load(){
   $("#hlab").innerHTML = hrs.map(h => `<span>${h.hour % 3 === 0 ? (h.hour % 12 || 12) + (h.hour < 12 ? "a" : "p") : ""}</span>`).join("");
 
   $("#daysWrap").style.display = REPORT.from !== REPORT.to ? "block" : "none";
-  $("#days").innerHTML = `<tr><th>Día</th><th class="n">Ventas</th><th class="n">Neto</th><th class="n">Ganancia</th></tr>` +
-    REPORT.byDay.map(d => `<tr><td>${new Date(d.day+"T12:00:00").toLocaleDateString("es-MX",{weekday:"short",day:"numeric",month:"short"})}</td><td class="n">${d.count}</td><td class="n">${money(d.net)}</td><td class="n">${hasCost?money(d.profit):"—"}</td></tr>`).join("");
+  $("#days").innerHTML = `<tr><th>Día</th><th class="n">Ventas</th><th class="n">Neto</th></tr>` +
+    REPORT.byDay.map(d => `<tr><td>${new Date(d.day+"T12:00:00").toLocaleDateString("es-MX",{weekday:"short",day:"numeric",month:"short"})}</td><td class="n">${d.count}</td><td class="n">${money(d.net)}</td></tr>`).join("");
 
-  $("#costNote").innerHTML = t.missingCost ? `⚠️ ${t.missingCost} producto(s) sin costo: su ganancia aparece igual a la venta. Llénalos en <a href="#" onclick="tab('cost');return false">Costos</a>.` : "";
-  $("#byItem").innerHTML = `<tr><th>Producto</th><th class="n">Cant.</th><th class="n">Venta</th><th class="n">Costo</th><th class="n">Ganancia</th><th class="n">%</th></tr>` +
-    (REPORT.byItem.length ? REPORT.byItem.map(i => `<tr><td>${esc(i.name)}${i.noCost?' <span class="muted">(sin costo)</span>':""}</td><td class="n">${i.qty}</td><td class="n">${money(i.net)}</td><td class="n">${money(i.cost)}</td><td class="n">${money(i.net-i.cost)}</td><td class="n">${t.net?Math.round(i.net/t.net*100):0}%</td></tr>`).join("")
-      : `<tr><td colspan=6 class="muted">Sin ventas en estas fechas.</td></tr>`);
+  $("#byItem").innerHTML = `<tr><th>Producto</th><th class="n">Cant.</th><th class="n">Venta</th><th class="n">%</th></tr>` +
+    (REPORT.byItem.length ? REPORT.byItem.map(i => `<tr><td>${esc(i.name)}</td><td class="n">${i.qty}</td><td class="n">${money(i.net)}</td><td class="n">${t.net?Math.round(i.net/t.net*100):0}%</td></tr>`).join("")
+      : `<tr><td colspan=4 class="muted">Sin ventas en estas fechas.</td></tr>`);
   drawSales();
 }
 const SRC = { dispatch:"Despacho", kiosk_card:"Kiosco (Square)", caja:"Caja" };
@@ -310,7 +298,6 @@ function drawSales(){
       const extra = [
         s.discountCents ? `Descuento ${money(s.discountCents)}` : "",
         s.tenderedCents != null ? `Recibió ${money(s.tenderedCents)} · Cambio ${money(s.changeCents)}` : "",
-        s.costCents ? `Costo ${money(s.costCents)} · Ganancia ${money(s.totalCents - s.costCents)}` : "",
         s.squareTxId ? `Square: ${esc(s.squareTxId)}` : "",
         s.voided ? `Anulada${s.voidReason ? ": " + esc(s.voidReason) : ""}` : ""
       ].filter(Boolean).join(" · ");
@@ -393,28 +380,6 @@ function showCharge(s){
 }
 function hideCharge(){ clearTimeout(csTimer); $("#chargeScreen").className = ""; }
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideCharge(); });
-
-/* ---------- costos ---------- */
-async function loadCosts(){
-  const [items, bom] = await Promise.all([api("/api/manage/items"), api("/api/mgmt/unit-costs").catch(() => ({}))]);
-  $("#costs").innerHTML = `<tr><th>Producto</th><th class="n">Precio</th><th class="n">Costo</th><th class="n">Ganancia</th><th class="n">Margen</th></tr>` +
-    items.filter(i => i.priceCents > 0).map(i => {
-      const b = bom[i.name];
-      const fromBom = b && b.cents != null;
-      const c = fromBom ? b.cents : i.costCents;
-      return `<tr><td>${esc(i.name)}<br><span class="muted">${fromBom ? "receta " + esc(b.product || "sin costo") : esc(i.category||"")}</span></td>
-        <td class="n">${money(i.priceCents)}</td>
-        <td class="n">${fromBom ? `<a href="/costos.html">${money(c)}</a>` : `$<input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px;text-align:right"
-            value="${c!=null?(c/100).toFixed(2):""}" placeholder="0.00" onchange="saveCost('${encodeURIComponent(i.name)}',this.value)">`}</td>
-        <td class="n">${c!=null?money(i.priceCents-c):"—"}</td>
-        <td class="n">${c!=null?Math.round((i.priceCents-c)/i.priceCents*100)+"%":"—"}</td></tr>`;
-    }).join("");
-}
-async function saveCost(enc, v){
-  const costCents = v === "" ? null : Math.round(parseFloat(v) * 100);
-  await api("/api/manage/items", { method:"PUT", body:JSON.stringify({ itemName:decodeURIComponent(enc), costCents }) });
-  loadCosts();
-}
 
 setPm("cash");
 if (PIN) tryPin(); else showPin();

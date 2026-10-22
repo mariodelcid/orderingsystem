@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Chilero — Costos y Ganancias</title>
+<title>Chilero — Dueño</title>
 <style>
   :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --dim:#94a3b8;
           --green:#4ade80; --red:#f87171; --amber:#fbbf24; --blue:#60a5fa; }
@@ -45,7 +45,7 @@
 </head>
 <body>
 <header>
-  <h1>Costos y Ganancias</h1>
+  <h1>Dueño · Costos y Ganancias</h1>
   <div class="links"><a href="/dispatch.html">Órdenes</a><a href="/sales.html">Ventas</a><a href="/manage.html">Administrar</a></div>
   <nav id="nav">
     <button data-s="daily" class="active">Daily Profits</button>
@@ -60,9 +60,20 @@
   </nav>
 </header>
 <div id="pinBox" style="display:none">
-  <h3>PIN de administrador</h3>
+  <h3>PIN de dueño</h3>
   <input id="pin" type="password" inputmode="numeric" maxlength="8"><br>
   <button class="btn" onclick="tryPin()">Entrar</button>
+</div>
+<div id="setupBox" style="display:none;max-width:340px;margin:80px auto;background:var(--card);border-radius:14px;padding:24px">
+  <h3>Crear PIN de dueño</h3>
+  <p class="muted" style="margin:8px 0 14px">Solo tú lo vas a saber. Es diferente al PIN que usan en Órdenes y Ventas, así el despachador no puede ver costos.</p>
+  <div class="lbl muted">PIN de administrador actual</div>
+  <input id="suAdmin" type="password" inputmode="numeric" maxlength="8" style="width:100%;margin:4px 0 10px">
+  <div class="lbl muted">Nuevo PIN de dueño (4 a 8 números)</div>
+  <input id="suPin" type="password" inputmode="numeric" maxlength="8" style="width:100%;margin:4px 0 10px">
+  <div class="lbl muted">Repite el PIN de dueño</div>
+  <input id="suPin2" type="password" inputmode="numeric" maxlength="8" style="width:100%;margin:4px 0 14px">
+  <button class="btn" onclick="setupOwner()">Crear</button>
 </div>
 <main id="app" style="display:none">
 
@@ -89,10 +100,13 @@
   <div class="row">
     <input type="date" id="invStart"> <span class="muted">to</span> <input type="date" id="invEnd">
     <button class="btn" onclick="loadInventory()">Load</button>
-    <span class="muted">Usage is computed from this app's sales &times; each product's BOM.</span>
   </div>
+  <p class="muted">Usage is computed from this app's sales &times; each product's BOM.
+    <b>+ Receive</b> = a delivery came in (adds to stock). <b>Count</b> = you counted the shelf (sets stock to the real number).</p>
   <h3 style="margin:14px 0 8px">Ingredient usage & stock</h3>
   <table id="invIngTable"></table>
+  <h3 style="margin:20px 0 8px">Recent deliveries & counts</h3>
+  <table id="invMoves"></table>
 </section>
 
 <section id="s-reports" class="section">
@@ -117,6 +131,7 @@
 </section>
 
 <section id="s-products" class="section">
+  <p class="muted">Pick a product, change a component or its quantity (or + Add component / ×), then tap <b>Save BOM</b>. Ingredient prices are changed in <b>Ingredients</b>.</p>
   <div class="row">
     <select id="prodSelect" onchange="renderBom()"></select>
     <button class="btn ghost" onclick="addProduct()">+ New product</button>
@@ -165,6 +180,11 @@
     </div>
   </div>
   <div class="card" style="max-width:420px;margin-top:14px">
+    <div class="lbl">Change owner PIN</div>
+    <div class="row"><input type="password" inputmode="numeric" maxlength="8" id="newOwnerPin" placeholder="new PIN" style="width:120px">
+      <button class="btn" onclick="changeOwnerPin()">Change</button></div>
+  </div>
+  <div class="card" style="max-width:420px;margin-top:14px">
     <div class="lbl">Copy costing data again from the management site</div>
     <div class="src" id="importSrc"></div>
     <p class="muted" style="margin:8px 0">Replaces ingredients, products/BOM, mixes, mappings, overhead and card fee here with what's on that site now. Sales are not touched.</p>
@@ -176,11 +196,12 @@
 <script>
 const $ = s => document.querySelector(s);
 const money = c => (c < 0 ? "-$" : "$") + Math.abs(c / 100).toFixed(2);
-let PIN = localStorage.getItem("pin") || "";
+let PIN = localStorage.getItem("ownerPin") || "";
 const api = async (url, opt = {}) => {
   url = url.replace(/^\/api\//, "/api/mgmt/");
-  const r = await fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-pin": PIN } });
+  const r = await fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-owner-pin": PIN } });
   if (r.status === 401) { showPin(); throw new Error("pin"); }
+  if (r.status === 403) { showSetup(); throw new Error("setup"); }
   const j = await r.json();
   if (!r.ok) { alert(j.error || "Error"); throw new Error(j.error); }
   return j;
@@ -240,12 +261,24 @@ async function loadHistory() {
 }
 
 
-function showPin() { $("#pinBox").style.display = "block"; $("#app").style.display = "none"; }
+function showPin() { $("#pinBox").style.display = "block"; $("#setupBox").style.display = "none"; $("#app").style.display = "none"; }
+function showSetup() { $("#setupBox").style.display = "block"; $("#pinBox").style.display = "none"; $("#app").style.display = "none"; }
 async function tryPin() {
   PIN = $("#pin").value || PIN;
-  const r = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: PIN }) }).then(r => r.json());
-  if (r.ok) { localStorage.setItem("pin", PIN); $("#pinBox").style.display = "none"; $("#app").style.display = "block"; loadDaily(); }
-  else { localStorage.removeItem("pin"); showPin(); if ($("#pin").value) alert("PIN incorrecto"); }
+  const r = await fetch("/api/owner-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: PIN }) }).then(r => r.json());
+  if (r.needsSetup) return showSetup();
+  if (r.ok) { localStorage.setItem("ownerPin", PIN); $("#pinBox").style.display = "none"; $("#app").style.display = "block"; loadDaily(); }
+  else { localStorage.removeItem("ownerPin"); showPin(); if ($("#pin").value) alert("PIN incorrecto"); }
+}
+async function setupOwner() {
+  const pin = $("#suPin").value;
+  if (pin !== $("#suPin2").value) return alert("Los PIN no coinciden");
+  const r = await fetch("/api/owner-setup", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminPin: $("#suAdmin").value, pin }) });
+  const j = await r.json();
+  if (!r.ok) return alert(j.error || "Error");
+  PIN = pin; localStorage.setItem("ownerPin", pin);
+  $("#setupBox").style.display = "none"; $("#app").style.display = "block"; loadDaily();
 }
 
 // ---- Inventory ----
@@ -266,16 +299,48 @@ async function loadInventory() {
       <td>${g.countedAt ? g.countedAt.slice(0, 10) : "—"}</td>
       <td>${g.usageSinceCount ?? "—"}</td>
       <td class="${low ? "neg" : g.estRemaining != null ? "pos" : ""}">${g.estRemaining ?? "—"} ${g.estRemaining != null ? (g.unit || "") : ""}</td>
-      <td><button class="btn ghost" onclick="setCount(${g.id}, '${g.code}')">Set count</button></td></tr>`;
+      <td style="white-space:nowrap"><button class="btn" onclick="receive(${g.id})">+ Receive</button>
+        <button class="btn ghost" onclick="setCount(${g.id}, '${g.code}')">Count</button></td></tr>`;
   }
   $("#invIngTable").innerHTML = h;
+  INV = data.ingredients;
+  const moves = await api("/api/moves");
+  $("#invMoves").innerHTML = "<tr><th>When</th><th>Ingredient</th><th>Type</th><th>Qty</th><th>Stock after</th><th>Note</th></tr>" +
+    (moves.length ? moves.map(m => `<tr><td>${new Date(m.createdAt).toLocaleString("es-MX",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}</td>
+      <td style="text-align:left">${m.code || ""} ${m.name || ""}</td><td>${m.kind === "receive" ? "Delivery" : "Count"}</td>
+      <td>${m.kind === "receive" ? "+" : ""}${+m.qty.toFixed(2)} ${m.unit || ""}</td><td>${m.stockAfter != null ? +m.stockAfter.toFixed(2) : "—"}</td><td style="text-align:left">${m.note || ""}</td></tr>`).join("")
+      : `<tr><td colspan=6 class="muted">Nothing yet.</td></tr>`);
 }
+let INV = [], ING_ALL = null;
 async function setCount(id, code) {
   const v = prompt(`Physical count for ${code} (in its unit). This resets usage tracking from now:`);
   if (v === null || v === "" || isNaN(+v)) return;
-  await api(`/api/ingredients/${id}`, { method: "PUT", body: JSON.stringify({
-    stockOnHand: +v, countedAt: new Date().toISOString()
-  })});
+  await api(`/api/ingredients/${id}/count`, { method: "POST", body: JSON.stringify({ qty: +v }) });
+  await loadInventory();
+}
+async function receive(id) {
+  ING_ALL = await api("/api/ingredients");
+  const g = ING_ALL.find(x => x.id === id); if (!g) return;
+  const unit = g.unit || "units";
+  let qty;
+  if (g.purchaseUnits > 0) {
+    const v = prompt(`${g.code} ${g.name}\nHow many PURCHASES came in? (1 purchase = ${g.purchaseUnits} ${unit})\nTip: type 0 to enter loose ${unit} instead.`, "1");
+    if (v === null || v === "" || isNaN(+v)) return;
+    if (+v === 0) {
+      const u = prompt(`How many ${unit} came in?`); if (u === null || u === "" || isNaN(+u)) return;
+      qty = +u;
+    } else qty = +v * g.purchaseUnits;
+  } else {
+    const u = prompt(`${g.code} ${g.name}\nHow many ${unit} came in?`); if (u === null || u === "" || isNaN(+u)) return;
+    qty = +u;
+  }
+  const price = prompt(`Price paid per purchase? Leave as is if it didn't change.${g.purchaseUnits > 0 ? "\n(Updates cost per unit and every BOM that uses it.)" : ""}`, g.pricePerPU ?? "");
+  if (price === null) return;
+  const note = prompt("Note (supplier, invoice #) — optional:", "") || "";
+  const body = { qty, note };
+  if (price !== "" && +price !== g.pricePerPU) body.pricePerPU = +price;
+  const r = await api(`/api/ingredients/${id}/receive`, { method: "POST", body: JSON.stringify(body) });
+  alert(`Added ${qty} ${unit}. Stock now ≈ ${r.stockAfter} ${unit}${body.pricePerPU != null ? ` · cost/unit $${r.costPerUnit}` : ""}`);
   await loadInventory();
 }
 
@@ -543,6 +608,12 @@ async function saveSettings() {
   })});
   alert("Saved");
 }
+async function changeOwnerPin() {
+  const pin = $("#newOwnerPin").value;
+  await api("/api/owner-pin", { method: "PUT", body: JSON.stringify({ pin }) });
+  PIN = pin; localStorage.setItem("ownerPin", pin); $("#newOwnerPin").value = "";
+  alert("Owner PIN changed");
+}
 async function reimport() {
   if (!confirm("Replace all costing data here with the management site's current data?")) return;
   const r = await api("/api/import", { method: "POST" });
@@ -550,7 +621,7 @@ async function reimport() {
   loadSettings();
 }
 
-if (PIN) tryPin(); else showPin();
+tryPin();
 </script>
 </body>
 </html>

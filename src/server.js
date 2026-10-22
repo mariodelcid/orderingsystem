@@ -32,8 +32,36 @@ async function getAdminPin() {
   pinCache = { at: Date.now(), value: s ? s.value : "2026" };
   return pinCache.value;
 }
+// Owner-only area (Dueño page: costs, BOM, profit, inventory) uses its own PIN, separate from
+// the admin/dispatcher PIN. The first time, the owner PIN is created with the admin PIN.
+async function getOwnerPin() {
+  const s = await prisma.setting.findUnique({ where: { key: "ownerPin" } });
+  return s ? s.value : null;
+}
+app.post("/api/owner-auth", async (req, res) => {
+  const owner = await getOwnerPin();
+  res.json({ needsSetup: !owner, ok: !!owner && String((req.body && req.body.pin) || "") === owner });
+});
+app.post("/api/owner-setup", async (req, res) => {
+  if (await getOwnerPin()) return res.status(400).json({ error: "El PIN de dueño ya existe" });
+  if (String(req.body.adminPin || "") !== await getAdminPin()) return res.status(401).json({ error: "PIN de administrador incorrecto" });
+  const pin = String(req.body.pin || "");
+  if (!/^\d{4,8}$/.test(pin)) return res.status(400).json({ error: "El PIN de dueño debe tener 4 a 8 números" });
+  if (pin === await getAdminPin()) return res.status(400).json({ error: "Usa un PIN diferente al de administrador" });
+  await prisma.setting.create({ data: { key: "ownerPin", value: pin } });
+  res.json({ ok: true });
+});
+app.use("/api/mgmt", async (req, res, next) => {
+  const owner = await getOwnerPin();
+  if (!owner) return res.status(403).json({ error: "Crea primero el PIN de dueño", needsSetup: true });
+  if (req.headers["x-owner-pin"] === owner) return next();
+  res.status(401).json({ error: "PIN de dueño requerido" });
+});
+const OWNER_KEYS = ["ownerPin", "dailyOverheadCents", "cardFeePct"];
+
 app.use(async (req, res, next) => {
   if (!req.path.startsWith("/api/")) return next();
+  if (req.path.startsWith("/api/mgmt/") || req.path === "/api/owner-auth" || req.path === "/api/owner-setup") return next();
   if (req.path.startsWith("/api/kiosk/") || req.path === "/api/auth" || req.path.startsWith("/api/images/"))
     return next();
   if (req.headers["x-pin"] === await getAdminPin()) return next();
@@ -312,7 +340,6 @@ app.get("/api/manage/items", async (_req, res) => {
         hidden: !!info.hidden,
         imageId: info.imageId || null,
         description: info.description || null,
-        costCents: info.costCents ?? null,
         hasPromo: !!promoByName[i.name]
       };
     }));
@@ -320,9 +347,8 @@ app.get("/api/manage/items", async (_req, res) => {
 });
 app.put("/api/manage/items", async (req, res) => {
   try {
-    const { itemName, hidden, imageId, description, costCents } = req.body;
+    const { itemName, hidden, imageId, description } = req.body;
     const data = {};
-    if (costCents !== undefined) data.costCents = costCents === null || costCents === "" ? null : Math.max(0, Math.round(+costCents));
     if (hidden !== undefined) data.hidden = !!hidden;
     if (imageId !== undefined) data.imageId = imageId;
     if (description !== undefined) data.description = String(description || "").slice(0, 500) || null;
@@ -374,12 +400,13 @@ app.delete("/api/promos/:id", async (req, res) => {
 
 // Settings (PIN change, store name)
 app.get("/api/settings", async (_req, res) => {
-  const all = await prisma.setting.findMany();
+  const all = (await prisma.setting.findMany()).filter(s => !OWNER_KEYS.includes(s.key));
   res.json(Object.fromEntries(all.map(s => [s.key, s.value])));
 });
 app.put("/api/settings", async (req, res) => {
   try {
     for (const [key, value] of Object.entries(req.body)) {
+      if (OWNER_KEYS.includes(key)) continue; // owner settings live on the Dueño page
       await prisma.setting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
     }
     pinCache = { at: 0, value: null };
@@ -425,15 +452,17 @@ app.get("/api/sales/report", async (req, res) => {
         if (!i.unitCostCents) k.noCost = true;
       }
     }
-    t.profit = t.net - t.cost;
-    t.missingCost = Object.values(byItem).filter(i => i.noCost).length;
+    // Costs and profit are owner-only (Dueño page); never sent to the Ventas page.
+    delete t.cost; delete t.profit; delete t.missingCost;
     res.json({
       from: r.from, to: r.to, totals: t,
-      byItem: Object.values(byItem).sort((a, b) => b.net - a.net),
+      byItem: Object.values(byItem).sort((a, b) => b.net - a.net).map(({ name, category, qty, net }) => ({ name, category, qty, net })),
       byHour: Array.from({ length: 24 }, (_, h) => ({ hour: h, net: byHour[h] || 0 })),
-      byDay: Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day)),
+      byDay: Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day)).map(({ day, count, net }) => ({ day, count, net })),
       bySource,
-      sales: sales.slice(0, 400)
+      sales: sales.slice(0, 400).map(({ costCents, items, ...rest }) => ({
+        ...rest, items: items.map(({ unitCostCents, ...i }) => i)
+      }))
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -469,7 +498,8 @@ app.post("/api/sales", async (req, res) => {
       },
       include: { items: true }
     });
-    res.json(sale);
+    const { costCents, ...pub } = sale;
+    res.json({ ...pub, items: sale.items.map(({ unitCostCents, ...i }) => i) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -493,11 +523,11 @@ app.get("/api/sales/csv", async (req, res) => {
     });
     const esc = v => `"${String(v ?? "").replaceAll('"', '""')}"`;
     const $ = c => (c / 100).toFixed(2);
-    const rows = [["venta", "fecha", "hora", "orden", "origen", "pago", "producto", "cant", "precio", "total_linea", "costo_linea", "anulada"]];
+    const rows = [["venta", "fecha", "hora", "orden", "origen", "pago", "producto", "cant", "precio", "total_linea", "anulada"]];
     for (const s of sales) for (const i of s.items) rows.push([
       s.id, localDay(s.createdAt), s.createdAt.toLocaleTimeString("es-MX", { timeZone: TZ }),
       s.orderNumber ?? "", s.source, s.paymentMethod === "cash" ? "efectivo" : "tarjeta",
-      i.itemName, i.qty, $(i.priceCents), $(i.lineTotalCents), $(i.unitCostCents * i.qty), s.voided ? "si" : ""
+      i.itemName, i.qty, $(i.priceCents), $(i.lineTotalCents), s.voided ? "si" : ""
     ]);
     res.set("Content-Type", "text/csv; charset=utf-8");
     res.set("Content-Disposition", `attachment; filename="ventas_${r.from}_${r.to}.csv"`);
@@ -527,7 +557,7 @@ async function backfillLedger() {
 app.get("/dispatch", (_req, res) => res.redirect("/dispatch.html"));
 app.get("/manage", (_req, res) => res.redirect("/manage.html"));
 app.get("/ventas", (_req, res) => res.redirect("/sales.html"));
-app.get("/costos", (_req, res) => res.redirect("/costos.html"));
+app.get("/dueno", (_req, res) => res.redirect("/dueno.html"));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => { console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`); mgmt.ensureData().then(backfillLedger); });
