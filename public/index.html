@@ -101,6 +101,21 @@
     #itemModal .addwrap { margin:6px -18px -16px; padding:8px 18px calc(10px + env(safe-area-inset-bottom)); }
     #itemModal .go { padding:13px 20px; font-size:17px; }
   }
+  /* ---- Pantalla de gracias: carita haciendo reverencia ---- */
+  #thanks { position:fixed; inset:0; z-index:10000; display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:#ffb300; color:#3e2723; text-align:center; overflow:hidden; cursor:pointer; }
+  #thanks.show { display:flex; }
+  #thanks .face { width:min(78vw,68vh); height:auto; transform-origin:50% 100%; animation:bow 2s ease-in-out 2; }
+  #thanks .open { animation:eyesOpen 2s step-end 2; }
+  #thanks .shut { opacity:0; animation:eyesShut 2s step-end 2; }
+  #thanks h1 { font-size:clamp(56px,15vw,190px); font-weight:900; line-height:1; letter-spacing:-1px; margin-top:2vh;
+    text-shadow:0 5px 0 rgba(0,0,0,.12); animation:pop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  #thanks p { font-size:clamp(20px,4.5vw,46px); font-weight:800; margin-top:1vh; opacity:.85; }
+  @keyframes bow { 0%,15% { transform:translateY(0) rotate(0) scaleY(1); }
+    45%,65% { transform:translateY(14%) scaleY(.82) rotate(0); } 90%,100% { transform:translateY(0) scaleY(1); } }
+  @keyframes eyesOpen { 0% { opacity:1 } 40% { opacity:0 } 75% { opacity:1 } }
+  @keyframes eyesShut { 0% { opacity:0 } 40% { opacity:1 } 75% { opacity:0 } }
+  @keyframes pop { from { transform:scale(.3); opacity:0 } to { transform:scale(1); opacity:1 } }
 </style>
 </head>
 <body>
@@ -326,8 +341,22 @@ async function placeOrder(paymentMethod){
 
 /* ---- Pantalla final (4 s y regresa al menú) ---- */
 let doneTimer=null;
+let thanksTimer=null, thanksNext=null;
+function showThanks(number, then){
+  $("#thanksNum").textContent = "Orden #" + number;
+  const t = $("#thanks"); t.classList.remove("show"); void t.offsetWidth; // restart animation
+  t.classList.add("show");
+  thanksNext = then; clearTimeout(thanksTimer); thanksTimer = setTimeout(hideThanks, 4200);
+}
+function hideThanks(){
+  clearTimeout(thanksTimer); $("#thanks").classList.remove("show");
+  const f = thanksNext; thanksNext = null; if (f) f();
+}
 function showDone(number, kind){
-  ["cardModal","failModal"].forEach(id=>$("#"+id).classList.remove("show"));
+  ["cardModal","failModal","cartModal"].forEach(id=>$("#"+id).classList.remove("show"));
+  showThanks(number, () => showNumber(number, kind));
+}
+function showNumber(number, kind){
   $("#orderNum").textContent="#"+number;
   $("#doneMsg").innerHTML = kind==="card"
     ? `<b style="color:var(--green)">¡Pago con tarjeta aprobado! ✅</b><br>Espera que llamen tu número 😊`
@@ -418,5 +447,22 @@ async function cancelCardOrder(){
 loadMenu().then(() => { if (location.pathname === "/square-callback") handleSquareReturn(); });
 setInterval(loadMenu, 5*60*1000);
 </script>
+<div id="thanks" onclick="hideThanks()">
+  <svg class="face" viewBox="0 0 400 300" aria-hidden="true">
+    <g class="open">
+      <ellipse cx="125" cy="110" rx="62" ry="70" fill="#fff" stroke="#3e2723" stroke-width="10"/>
+      <ellipse cx="275" cy="110" rx="62" ry="70" fill="#fff" stroke="#3e2723" stroke-width="10"/>
+      <circle cx="135" cy="125" r="30" fill="#3e2723"/><circle cx="285" cy="125" r="30" fill="#3e2723"/>
+      <circle cx="146" cy="113" r="10" fill="#fff"/><circle cx="296" cy="113" r="10" fill="#fff"/>
+    </g>
+    <g class="shut" fill="none" stroke="#3e2723" stroke-width="14" stroke-linecap="round">
+      <path d="M70 120 Q125 70 180 120"/><path d="M220 120 Q275 70 330 120"/>
+    </g>
+    <circle cx="70" cy="215" r="22" fill="#ff7043" opacity=".45"/><circle cx="330" cy="215" r="22" fill="#ff7043" opacity=".45"/>
+    <path d="M130 210 Q200 285 270 210" fill="#d84315" stroke="#3e2723" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <h1>Thank you!</h1>
+  <p id="thanksNum"></p>
+</div>
 </body>
 </html>
