@@ -21,6 +21,8 @@ async function fetchPosItems() {
   return data;
 }
 
+const mgmt = require("./mgmt")(prisma, { TZ, fetchPosItems });
+
 // ---------------- PIN gate ----------------
 // Public: kiosk endpoints, /api/auth, images. Everything else needs x-pin.
 let pinCache = { at: 0, value: null };
@@ -175,7 +177,10 @@ async function buildSaleLines(lines) {
   try { posItems = await fetchPosItems(); } catch (e) { console.error("items lookup failed", e.message); }
   const byName = Object.fromEntries(posItems.map(i => [i.name, i]));
   const infos = await prisma.itemInfo.findMany({ where: { itemName: { in: lines.map(l => l.itemName) } } });
+  // Cost priority: BOM recipe (Costos y Ganancias mapping) -> manual cost on the Ventas page -> 0
+  const bomCost = await mgmt.unitCostCentsByName(lines.map(l => l.itemName));
   const costBy = Object.fromEntries(infos.map(i => [i.itemName, i.costCents || 0]));
+  Object.assign(costBy, bomCost);
   let subtotal = 0, total = 0, cost = 0;
   const items = lines.map(l => {
     const it = byName[l.itemName];
@@ -382,6 +387,9 @@ app.put("/api/settings", async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// ---------------- Costos y Ganancias (clone of texas-stores-management, PIN) ----------------
+app.use("/api/mgmt", mgmt.router);
+
 // ---------------- Ventas (local ledger, PIN) ----------------
 function parseRange(q) {
   const re = /^\d{4}-\d{2}-\d{2}$/;
@@ -519,6 +527,7 @@ async function backfillLedger() {
 app.get("/dispatch", (_req, res) => res.redirect("/dispatch.html"));
 app.get("/manage", (_req, res) => res.redirect("/manage.html"));
 app.get("/ventas", (_req, res) => res.redirect("/sales.html"));
+app.get("/costos", (_req, res) => res.redirect("/costos.html"));
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => { console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`); backfillLedger(); });
+app.listen(port, () => { console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`); mgmt.ensureData().then(backfillLedger); });

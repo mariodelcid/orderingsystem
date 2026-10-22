@@ -102,3 +102,73 @@ model SaleItem {
   lineTotalCents Int    @default(0)
   unitCostCents  Int    @default(0)
 }
+
+// ================= Costos y Ganancias (clone of texas-stores-management) =================
+// Same data model as the management site; sales come from this app's own Sale ledger.
+
+// Raw materials / packaging / disposables
+model Ingredient {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique // e.g. "1001", "2002", "3014"
+  name           String
+  unit           String? // oz | each
+  purchaseUnits  Float? // units per purchase (PU)
+  pricePerPU     Float? // $ per purchase
+  costPerUnit    Float     @default(0) // $ per unit (oz/each)
+  provider1      String?
+  provider1Price Float?
+  provider2      String?
+  provider2Price Float?
+  provider3      String?
+  provider3Price Float?
+  stockOnHand    Float? // last physical count
+  countedAt      DateTime? // when the count was taken
+  bomLines       BomLine[]
+}
+
+// Final products (4xxx codes)
+model Product {
+  id         Int       @id @default(autoincrement())
+  code       String    @unique // e.g. "4001"
+  name       String
+  priceCents Int? // reference sell price (actual sale price wins for revenue)
+  bomLines   BomLine[]
+  posMaps    PosMap[]
+}
+
+// One component line of a product's recipe
+model BomLine {
+  id            Int        @id @default(autoincrement())
+  productId     Int
+  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredientId  Int
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  componentType String? // Ingredient | Packaging | Disposable
+  quantity      Float      @default(0)
+}
+
+// Prepared mixes (their cost/oz feeds an Ingredient row)
+model Mix {
+  id                   Int       @id @default(autoincrement())
+  name                 String    @unique
+  linkedIngredientCode String?
+  lines                MixLine[]
+}
+
+model MixLine {
+  id            Int     @id @default(autoincrement())
+  mixId         Int
+  mix           Mix     @relation(fields: [mixId], references: [id], onDelete: Cascade)
+  componentName String
+  oz            Float?
+  cost          Float?
+}
+
+// Maps a menu item name (as sold here) to a product BOM
+model PosMap {
+  id        Int      @id @default(autoincrement())
+  posName   String   @unique
+  kind      String   @default("product") // product | zerocost | ignore
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}

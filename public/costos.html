@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Chilero — Costos y Ganancias</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --dim:#94a3b8;
+          --green:#4ade80; --red:#f87171; --amber:#fbbf24; --blue:#60a5fa; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding-top:calc(14px + env(safe-area-inset-top)) !important; }
+  .links a { color:var(--dim); text-decoration:none; font-size:13px; margin-right:12px; }
+  #pinBox { max-width:320px; margin:120px auto; background:var(--card); border-radius:14px; padding:24px; text-align:center; }
+  #pinBox input { font-size:26px; width:150px; text-align:center; margin:12px 0; }
+  .src { font-size:12px; color:var(--dim); word-break:break-all; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin-right:8px; }
+  nav button { background:none; border:none; color:var(--dim); font-size:14px; padding:8px 10px; cursor:pointer; border-radius:8px; }
+  nav button.active { color:var(--text); background:var(--card); }
+  main { padding:20px; max-width:1100px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:14px 0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; }
+  .card .lbl { font-size:12px; color:var(--dim); }
+  .card .val { font-size:22px; font-weight:700; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border-radius:12px; overflow:hidden; font-size:14px; }
+  th,td { padding:8px 10px; text-align:right; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; }
+  tr:last-child td { border-bottom:none; }
+  .pos { color:var(--green); } .neg { color:var(--red); } .warn { color:var(--amber); }
+  input,select { background:#0b1220; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:14px; }
+  input[type=number] { width:90px; } input[type=date] { width:150px; }
+  button.btn { background:var(--blue); color:#0b1220; border:none; border-radius:8px; padding:7px 14px; font-weight:600; cursor:pointer; font-size:14px; }
+  button.btn.ghost { background:var(--card); color:var(--text); border:1px solid var(--line); }
+  button.btn.danger { background:var(--red); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0; }
+  .muted { color:var(--dim); font-size:13px; }
+  .section { display:none; } .section.active { display:block; }
+  td input { width:100%; min-width:60px; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:99px; background:#0b1220; color:var(--dim); }
+  @media print { header, .row, .section { display:none!important } #s-reports { display:block!important } #s-reports .row { display:none!important } body { background:#fff; color:#000 } .card, table { background:#fff; color:#000; border:1px solid #ccc } th, td { border-bottom:1px solid #ccc } }
+  @media (max-width:700px){ th,td{padding:6px 5px;font-size:12px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Costos y Ganancias</h1>
+  <div class="links"><a href="/dispatch.html">Órdenes</a><a href="/sales.html">Ventas</a><a href="/manage.html">Administrar</a></div>
+  <nav id="nav">
+    <button data-s="daily" class="active">Daily Profits</button>
+    <button data-s="history">History</button>
+    <button data-s="inventory">Inventory</button>
+    <button data-s="reports">Reports</button>
+    <button data-s="products">Products & BOM</button>
+    <button data-s="ingredients">Ingredients</button>
+    <button data-s="mixes">Mixes</button>
+    <button data-s="mappings">Item Mapping</button>
+    <button data-s="settings">Settings</button>
+  </nav>
+</header>
+<div id="pinBox" style="display:none">
+  <h3>PIN de administrador</h3>
+  <input id="pin" type="password" inputmode="numeric" maxlength="8"><br>
+  <button class="btn" onclick="tryPin()">Entrar</button>
+</div>
+<main id="app" style="display:none">
+
+<section id="s-daily" class="section active">
+  <div class="row">
+    <input type="date" id="dailyDate">
+    <button class="btn" onclick="loadDaily()">Load</button>
+    <span class="muted" id="dailyMeta"></span>
+  </div>
+  <div class="cards" id="dailyCards"></div>
+  <table id="dailyTable"></table>
+  <p class="muted" id="dailyWarn" style="margin-top:10px"></p>
+</section>
+
+<section id="s-history" class="section">
+  <div class="row">
+    <input type="date" id="histStart"> <span class="muted">to</span> <input type="date" id="histEnd">
+    <button class="btn" onclick="loadHistory()">Load</button>
+  </div>
+  <table id="histTable"></table>
+</section>
+
+<section id="s-inventory" class="section">
+  <div class="row">
+    <input type="date" id="invStart"> <span class="muted">to</span> <input type="date" id="invEnd">
+    <button class="btn" onclick="loadInventory()">Load</button>
+    <span class="muted">Usage is computed from this app's sales &times; each product's BOM.</span>
+  </div>
+  <h3 style="margin:14px 0 8px">Ingredient usage & stock</h3>
+  <table id="invIngTable"></table>
+</section>
+
+<section id="s-reports" class="section">
+  <div class="row">
+    <select id="repPeriod">
+      <option value="week">Weekly (Mon-Sun)</option>
+      <option value="month">Monthly</option>
+    </select>
+    <input type="date" id="repDate">
+    <button class="btn" onclick="loadReport()">Generate</button>
+    <button class="btn ghost" onclick="window.print()">Print</button>
+    <button class="btn ghost" onclick="downloadReportCSV()">Download CSV</button>
+    <span class="muted" id="repMeta"></span>
+  </div>
+  <div id="repBody">
+    <div class="cards" id="repCards"></div>
+    <h3 style="margin:14px 0 8px">By day</h3>
+    <table id="repDayTable"></table>
+    <h3 style="margin:20px 0 8px">By item</h3>
+    <table id="repItemTable"></table>
+  </div>
+</section>
+
+<section id="s-products" class="section">
+  <div class="row">
+    <select id="prodSelect" onchange="renderBom()"></select>
+    <button class="btn ghost" onclick="addProduct()">+ New product</button>
+  </div>
+  <div class="cards" id="prodCards"></div>
+  <div class="row">
+    <label class="muted">Sell price $ <input type="number" step="0.01" id="prodPrice" style="width:90px"></label>
+    <button class="btn" onclick="saveProduct()">Save price</button>
+    <button class="btn danger" onclick="deleteProduct()">Delete product</button>
+  </div>
+  <table id="bomTable"></table>
+  <div class="row">
+    <button class="btn ghost" onclick="addBomRow()">+ Add component</button>
+    <button class="btn" onclick="saveBom()">Save BOM</button>
+  </div>
+</section>
+
+<section id="s-ingredients" class="section">
+  <div class="row">
+    <input type="text" id="ingFilter" placeholder="Filter..." oninput="renderIngredients()">
+    <button class="btn ghost" onclick="addIngredient()">+ New ingredient</button>
+    <span class="muted">Cost per unit updates every BOM that uses it.</span>
+  </div>
+  <table id="ingTable"></table>
+</section>
+
+<section id="s-mixes" class="section">
+  <div class="row"><button class="btn ghost" onclick="addMix()">+ New mix</button>
+  <span class="muted">A mix's cost/oz should be copied into its linked ingredient's cost.</span></div>
+  <div id="mixList"></div>
+</section>
+
+<section id="s-mappings" class="section">
+  <p class="muted" style="margin-bottom:10px">Sales come from this ordering system (Ventas). Every item name must map to a product (for BOM costing), be marked "no cost" (pure revenue, e.g. Toppings/Discount), or "ignore".</p>
+  <table id="mapTable"></table>
+</section>
+
+<section id="s-settings" class="section">
+  <div class="card" style="max-width:420px">
+    <div class="lbl">Daily overhead ($ per day, subtracted from total daily profit)</div>
+    <div class="row"><input type="number" step="1" id="setOverhead"></div>
+    <div class="lbl" style="margin-top:10px">Credit card fee (% of card sales, added to each day's overhead)</div>
+    <div class="row">
+      <input type="number" step="0.01" id="setCardFee">
+      <button class="btn" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+  <div class="card" style="max-width:420px;margin-top:14px">
+    <div class="lbl">Copy costing data again from the management site</div>
+    <div class="src" id="importSrc"></div>
+    <p class="muted" style="margin:8px 0">Replaces ingredients, products/BOM, mixes, mappings, overhead and card fee here with what's on that site now. Sales are not touched.</p>
+    <button class="btn ghost" onclick="reimport()">Import again</button>
+  </div>
+</section>
+
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const money = c => (c < 0 ? "-$" : "$") + Math.abs(c / 100).toFixed(2);
+let PIN = localStorage.getItem("pin") || "";
+const api = async (url, opt = {}) => {
+  url = url.replace(/^\/api\//, "/api/mgmt/");
+  const r = await fetch(url, { ...opt, headers: { "Content-Type": "application/json", "x-pin": PIN } });
+  if (r.status === 401) { showPin(); throw new Error("pin"); }
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || "Error"); throw new Error(j.error); }
+  return j;
+};
+
+// nav
+$("#nav").addEventListener("click", e => {
+  if (e.target.dataset.s === undefined) return;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b === e.target));
+  document.querySelectorAll(".section").forEach(x => x.classList.remove("active"));
+  $("#s-" + e.target.dataset.s).classList.add("active");
+  ({daily: loadDaily, history: loadHistory, inventory: loadInventory, reports: loadReport, products: loadProducts, ingredients: loadIngredients,
+    mixes: loadMixes, mappings: loadMappings, settings: loadSettings})[e.target.dataset.s]();
+});
+
+// ---- Daily ----
+async function loadDaily() {
+  const d = $("#dailyDate").value;
+  const data = await api("/api/daily" + (d ? "?date=" + d : ""));
+  $("#dailyDate").value = data.date;
+  $("#dailyMeta").textContent = `${data.saleCount} sales · timezone ${data.timezone}`;
+  const t = data.totals;
+  $("#dailyCards").innerHTML = `
+    <div class="card"><div class="lbl">Revenue</div><div class="val">${money(t.revenueCents)}</div></div>
+    <div class="card"><div class="lbl">Ingredient cost</div><div class="val">${money(t.costCents)}</div></div>
+    <div class="card"><div class="lbl">Profit before overhead</div><div class="val">${money(t.profitCents)}</div></div>
+    <div class="card"><div class="lbl">Overhead ($${(data.baseOverheadCents/100).toFixed(0)} + ${data.cardFeePct}% of ${money(data.cardCents)} card)</div><div class="val">-${money(data.overheadCents)}</div></div>
+    <div class="card"><div class="lbl">Net profit (day)</div><div class="val ${t.netProfitCents >= 0 ? "pos" : "neg"}">${money(t.netProfitCents)}</div></div>`;
+  let h = "<tr><th>Item</th><th>BOM</th><th>Qty</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr>";
+  for (const r of data.items) {
+    const margin = r.revenueCents ? (100 * r.profitCents / r.revenueCents).toFixed(0) + "%" : "—";
+    h += r.mapped
+      ? `<tr><td>${r.posName}</td><td><span class="tag">${r.productCode || ""}</span></td><td>${r.qty}</td>
+         <td>${money(r.revenueCents)}</td><td>${money(r.costCents)}</td>
+         <td class="${r.profitCents >= 0 ? "pos" : "neg"}">${money(r.profitCents)}</td><td>${margin}</td></tr>`
+      : `<tr><td>${r.posName}</td><td><span class="tag warn">unmapped</span></td><td>${r.qty}</td>
+         <td>${money(r.revenueCents)}</td><td class="warn">?</td><td class="warn">?</td><td>—</td></tr>`;
+  }
+  $("#dailyTable").innerHTML = h;
+  $("#dailyWarn").textContent = t.unmappedRevenueCents
+    ? `⚠ ${money(t.unmappedRevenueCents)} of revenue is from unmapped POS items (not counted in profit). Map them in "POS Mapping".` : "";
+}
+
+// ---- History ----
+async function loadHistory() {
+  const q = new URLSearchParams();
+  if ($("#histStart").value) q.set("start", $("#histStart").value);
+  if ($("#histEnd").value) q.set("end", $("#histEnd").value);
+  const data = await api("/api/range?" + q);
+  let h = "<tr><th>Date</th><th>Revenue</th><th>Card sales</th><th>Cost</th><th>Profit</th><th>Overhead</th><th>Net</th></tr>";
+  for (const d of data.days) {
+    h += `<tr><td>${d.date}</td><td>${money(d.revenueCents)}</td><td>${money(d.cardCents || 0)}</td><td>${money(d.costCents)}</td>
+      <td>${money(d.profitCents)}</td><td>-${money(d.overheadCents)}</td>
+      <td class="${d.netProfitCents >= 0 ? "pos" : "neg"}">${money(d.netProfitCents)}</td></tr>`;
+  }
+  $("#histTable").innerHTML = h;
+}
+
+
+function showPin() { $("#pinBox").style.display = "block"; $("#app").style.display = "none"; }
+async function tryPin() {
+  PIN = $("#pin").value || PIN;
+  const r = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: PIN }) }).then(r => r.json());
+  if (r.ok) { localStorage.setItem("pin", PIN); $("#pinBox").style.display = "none"; $("#app").style.display = "block"; loadDaily(); }
+  else { localStorage.removeItem("pin"); showPin(); if ($("#pin").value) alert("PIN incorrecto"); }
+}
+
+// ---- Inventory ----
+async function loadInventory() {
+  const q = new URLSearchParams();
+  if ($("#invStart").value) q.set("start", $("#invStart").value);
+  if ($("#invEnd").value) q.set("end", $("#invEnd").value);
+  const data = await api("/api/inventory?" + q);
+  $("#invStart").value = data.start; $("#invEnd").value = data.end;
+  let h = "<tr><th>Code</th><th>Ingredient</th><th>Used (" + data.start +
+          (data.end !== data.start ? " to " + data.end : "") + ")</th><th>Last count</th><th>Counted on</th><th>Used since count</th><th>Est. remaining</th><th></th></tr>";
+  for (const g of data.ingredients) {
+    const low = g.estRemaining != null && g.estRemaining <= 0;
+    h += `<tr>
+      <td>${g.code}</td><td style="text-align:left">${g.name}</td>
+      <td>${g.used} ${g.unit || ""}</td>
+      <td>${g.stockOnHand ?? "—"}</td>
+      <td>${g.countedAt ? g.countedAt.slice(0, 10) : "—"}</td>
+      <td>${g.usageSinceCount ?? "—"}</td>
+      <td class="${low ? "neg" : g.estRemaining != null ? "pos" : ""}">${g.estRemaining ?? "—"} ${g.estRemaining != null ? (g.unit || "") : ""}</td>
+      <td><button class="btn ghost" onclick="setCount(${g.id}, '${g.code}')">Set count</button></td></tr>`;
+  }
+  $("#invIngTable").innerHTML = h;
+}
+async function setCount(id, code) {
+  const v = prompt(`Physical count for ${code} (in its unit). This resets usage tracking from now:`);
+  if (v === null || v === "" || isNaN(+v)) return;
+  await api(`/api/ingredients/${id}`, { method: "PUT", body: JSON.stringify({
+    stockOnHand: +v, countedAt: new Date().toISOString()
+  })});
+  await loadInventory();
+}
+
+
+// ---- Reports ----
+let lastReport = null;
+async function loadReport() {
+  const q = new URLSearchParams({ period: $("#repPeriod").value });
+  if ($("#repDate").value) q.set("date", $("#repDate").value);
+  const r = await api("/api/report?" + q);
+  lastReport = r;
+  if (!$("#repDate").value) $("#repDate").value = r.start;
+  $("#repMeta").textContent = `${r.period === "month" ? "Month" : "Week"} ${r.start} to ${r.end} - ${r.saleCount} sales - overhead ${money(r.overheadCents)}/day x ${r.daysElapsed} day(s) + ${r.cardFeePct}% card fee (${money(r.cardFeeTotalCents)} on ${money(r.cardTotalCents)} card sales)`;
+  const t = r.totals;
+  $("#repCards").innerHTML = `
+    <div class="card"><div class="lbl">Revenue</div><div class="val">${money(t.revenueCents)}</div></div>
+    <div class="card"><div class="lbl">Ingredient cost</div><div class="val">${money(t.costCents)}</div></div>
+    <div class="card"><div class="lbl">Profit before overhead</div><div class="val">${money(t.profitCents)}</div></div>
+    <div class="card"><div class="lbl">Overhead (${r.daysElapsed}d + card fees)</div><div class="val">-${money(r.overheadTotalCents)}</div></div>
+    <div class="card"><div class="lbl">Net profit</div><div class="val ${t.netProfitCents >= 0 ? "pos" : "neg"}">${money(t.netProfitCents)}</div></div>`;
+  let dh = "<tr><th>Date</th><th>Sales</th><th>Revenue</th><th>Card</th><th>Cost</th><th>Profit</th><th>Net (after overhead)</th></tr>";
+  for (const d of r.days) {
+    const net = d.profitCents - r.overheadCents - (d.cardFeeCents || 0);
+    dh += `<tr><td>${d.date}</td><td>${d.sales}</td><td>${money(d.revenueCents)}</td><td>${money(d.cardCents || 0)}</td><td>${money(d.costCents)}</td>
+      <td>${money(d.profitCents)}</td><td class="${net >= 0 ? "pos" : "neg"}">${money(net)}</td></tr>`;
+  }
+  $("#repDayTable").innerHTML = dh;
+  let ih = "<tr><th>Item</th><th>Qty</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr>";
+  for (const it of r.items) {
+    const margin = it.mapped && it.revenueCents ? (100 * it.profitCents / it.revenueCents).toFixed(0) + "%" : "?";
+    ih += `<tr><td>${it.posName}${it.mapped ? "" : ' <span class="tag warn">unmapped</span>'}</td><td>${it.qty}</td>
+      <td>${money(it.revenueCents)}</td><td>${it.mapped ? money(it.costCents) : "?"}</td>
+      <td class="${it.profitCents >= 0 ? "pos" : "neg"}">${it.mapped ? money(it.profitCents) : "?"}</td><td>${margin}</td></tr>`;
+  }
+  $("#repItemTable").innerHTML = ih;
+}
+function downloadReportCSV() {
+  if (!lastReport) return alert("Generate a report first");
+  const r = lastReport, m = c => (c / 100).toFixed(2);
+  const rows = [
+    [`${r.period} report`, `${r.start} to ${r.end}`],
+    [],
+    ["TOTALS"], ["Revenue", m(r.totals.revenueCents)], ["Ingredient cost", m(r.totals.costCents)],
+    ["Profit before overhead", m(r.totals.profitCents)],
+    [`Overhead (${m(r.overheadCents)}/day x ${r.daysElapsed} days + ${r.cardFeePct}% card fee)`, m(r.overheadTotalCents)],
+    [`Card sales (fee ${m(r.cardFeeTotalCents)})`, m(r.cardTotalCents)],
+    ["Net profit", m(r.totals.netProfitCents)],
+    [],
+    ["BY DAY"], ["Date", "Sales", "Revenue", "Cost", "Profit", "Net after overhead"],
+    ...r.days.map(d => [d.date, d.sales, m(d.revenueCents), m(d.costCents), m(d.profitCents), m(d.profitCents - r.overheadCents - (d.cardFeeCents || 0))]),
+    [],
+    ["BY ITEM"], ["Item", "Qty", "Revenue", "Cost", "Profit"],
+    ...r.items.map(i => [i.posName, i.qty, m(i.revenueCents), i.mapped ? m(i.costCents) : "?", i.mapped ? m(i.profitCents) : "?"])
+  ];
+  const csv = rows.map(row => row.map(c => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `report-${r.period}-${r.start}.csv`;
+  a.click();
+}
+
+// ---- Products & BOM ----
+let products = [], ingredients = [];
+async function loadProducts() {
+  [products, ingredients] = await Promise.all([api("/api/products"), api("/api/ingredients")]);
+  const sel = $("#prodSelect");
+  const cur = sel.value;
+  sel.innerHTML = products.map(p => `<option value="${p.id}">${p.code} ${p.name}</option>`).join("");
+  if (cur && products.some(p => p.id == cur)) sel.value = cur;
+  renderBom();
+}
+function curProduct() { return products.find(p => p.id == $("#prodSelect").value); }
+function renderBom() {
+  const p = curProduct(); if (!p) return;
+  $("#prodPrice").value = p.priceCents != null ? (p.priceCents / 100).toFixed(2) : "";
+  const profit = p.priceCents != null ? p.priceCents - Math.round(p.bomCost * 100) : null;
+  $("#prodCards").innerHTML = `
+    <div class="card"><div class="lbl">BOM cost</div><div class="val">$${p.bomCost.toFixed(2)}</div></div>
+    <div class="card"><div class="lbl">Sell price</div><div class="val">${p.priceCents != null ? money(p.priceCents) : "—"}</div></div>
+    <div class="card"><div class="lbl">Profit / unit</div><div class="val ${profit >= 0 ? "pos" : "neg"}">${profit != null ? money(profit) : "—"}</div></div>`;
+  let h = "<tr><th>Type</th><th>Component</th><th>Qty</th><th>Unit cost</th><th>Total</th><th></th></tr>";
+  p.bomLines.forEach((l, i) => {
+    h += `<tr>
+      <td><select data-i="${i}" class="bom-type">${["Ingredient","Packaging","Disposable"].map(t =>
+        `<option ${l.componentType === t ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+      <td><select data-i="${i}" class="bom-ing">${ingredients.map(g =>
+        `<option value="${g.code}" ${g.id === l.ingredientId ? "selected" : ""}>${g.code} ${g.name}</option>`).join("")}</select></td>
+      <td><input type="number" step="any" class="bom-qty" data-i="${i}" value="${l.quantity}"></td>
+      <td>$${(l.ingredient.costPerUnit || 0).toFixed(4)}</td>
+      <td>$${((l.ingredient.costPerUnit || 0) * l.quantity).toFixed(2)}</td>
+      <td><button class="btn danger" onclick="delBomRow(${i})">×</button></td></tr>`;
+  });
+  $("#bomTable").innerHTML = h;
+}
+function addBomRow() {
+  const p = curProduct(); if (!p) return;
+  const g = ingredients[0];
+  p.bomLines.push({ componentType: "Ingredient", ingredientId: g.id, ingredient: g, quantity: 1 });
+  renderBom();
+}
+function delBomRow(i) { curProduct().bomLines.splice(i, 1); renderBom(); }
+async function saveBom() {
+  const p = curProduct(); if (!p) return;
+  const lines = [...document.querySelectorAll("#bomTable tr")].slice(1).map(tr => ({
+    componentType: tr.querySelector(".bom-type").value,
+    ingredientCode: tr.querySelector(".bom-ing").value,
+    quantity: +tr.querySelector(".bom-qty").value || 0
+  }));
+  await api(`/api/products/${p.id}/bom`, { method: "PUT", body: JSON.stringify(lines) });
+  await loadProducts(); alert("BOM saved");
+}
+async function saveProduct() {
+  const p = curProduct(); if (!p) return;
+  const v = $("#prodPrice").value;
+  await api(`/api/products/${p.id}`, { method: "PUT", body: JSON.stringify({ priceCents: v === "" ? null : Math.round(+v * 100) }) });
+  await loadProducts();
+}
+async function addProduct() {
+  const code = prompt("Product code (e.g. 4040):"); if (!code) return;
+  const name = prompt("Product name:"); if (!name) return;
+  const price = prompt("Sell price $ (blank = none):");
+  await api("/api/products", { method: "POST", body: JSON.stringify({ code, name, priceCents: price ? Math.round(+price * 100) : null }) });
+  await loadProducts();
+  $("#prodSelect").value = products.find(p => p.code === code)?.id;
+  renderBom();
+}
+async function deleteProduct() {
+  const p = curProduct(); if (!p || !confirm(`Delete ${p.code} ${p.name}?`)) return;
+  await api(`/api/products/${p.id}`, { method: "DELETE" });
+  await loadProducts();
+}
+
+// ---- Ingredients ----
+let ings = [];
+async function loadIngredients() { ings = await api("/api/ingredients"); renderIngredients(); }
+function renderIngredients() {
+  const f = ($("#ingFilter").value || "").toLowerCase();
+  let h = "<tr><th>Code</th><th>Name</th><th>Unit</th><th>Units/PU</th><th>$/PU</th><th>Cost/unit</th><th></th></tr>";
+  for (const g of ings.filter(g => (g.code + " " + g.name).toLowerCase().includes(f))) {
+    h += `<tr data-id="${g.id}">
+      <td>${g.code}</td>
+      <td><input value="${g.name.replaceAll('"','&quot;')}" data-f="name"></td>
+      <td><input value="${g.unit || ""}" data-f="unit" style="width:55px"></td>
+      <td><input type="number" step="any" value="${g.purchaseUnits ?? ""}" data-f="purchaseUnits"></td>
+      <td><input type="number" step="any" value="${g.pricePerPU ?? ""}" data-f="pricePerPU"></td>
+      <td><input type="number" step="any" value="${g.costPerUnit ?? 0}" data-f="costPerUnit"></td>
+      <td style="white-space:nowrap"><button class="btn" onclick="saveIng(${g.id})">Save</button>
+      <button class="btn danger" onclick="delIng(${g.id})">×</button></td></tr>`;
+  }
+  $("#ingTable").innerHTML = h;
+}
+async function saveIng(id) {
+  const tr = document.querySelector(`#ingTable tr[data-id="${id}"]`);
+  const data = {};
+  tr.querySelectorAll("input[data-f]").forEach(i => {
+    data[i.dataset.f] = i.type === "number" ? (i.value === "" ? null : +i.value) : i.value;
+  });
+  if (data.costPerUnit == null) data.costPerUnit = 0;
+  await api(`/api/ingredients/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  await loadIngredients();
+}
+async function delIng(id) {
+  if (!confirm("Delete ingredient? Its BOM lines are removed too.")) return;
+  await api(`/api/ingredients/${id}`, { method: "DELETE" });
+  await loadIngredients();
+}
+async function addIngredient() {
+  const code = prompt("Code (e.g. 1079):"); if (!code) return;
+  const name = prompt("Name:"); if (!name) return;
+  const unit = prompt("Unit (oz/each):", "oz");
+  const cost = prompt("Cost per unit $:", "0");
+  await api("/api/ingredients", { method: "POST", body: JSON.stringify({ code, name, unit, costPerUnit: +cost || 0 }) });
+  await loadIngredients();
+}
+
+// ---- Mixes ----
+async function loadMixes() {
+  const mixes = await api("/api/mixes");
+  $("#mixList").innerHTML = mixes.map(m => {
+    const oz = m.lines.reduce((s, l) => s + (l.oz || 0), 0);
+    const cost = m.lines.reduce((s, l) => s + (l.cost || 0), 0);
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between">
+        <b>${m.name}</b>
+        <span class="muted">${oz} oz · $${cost.toFixed(2)} · $${oz ? (cost / oz).toFixed(4) : "0"}/oz
+        ${m.linkedIngredientCode ? `· feeds ingredient ${m.linkedIngredientCode}` : ""}</span>
+      </div>
+      <table>${m.lines.map(l => `<tr><td>${l.componentName}</td><td>${l.oz ?? ""} oz</td><td>$${(l.cost ?? 0).toFixed(2)}</td></tr>`).join("")}</table>
+      <div class="row">
+        <button class="btn ghost" onclick='editMix(${JSON.stringify(JSON.stringify(m))})'>Edit (JSON)</button>
+        <button class="btn danger" onclick="delMix(${m.id})">Delete</button>
+        ${m.linkedIngredientCode ? `<button class="btn" onclick="applyMix('${m.linkedIngredientCode}',${oz ? cost / oz : 0})">Apply $/oz to ingredient</button>` : ""}
+      </div></div>`;
+  }).join("");
+}
+async function editMix(json) {
+  const m = JSON.parse(json);
+  const edited = prompt("Edit mix (JSON: name, linkedIngredientCode, lines[componentName,oz,cost]):",
+    JSON.stringify({ name: m.name, linkedIngredientCode: m.linkedIngredientCode,
+      lines: m.lines.map(l => ({ componentName: l.componentName, oz: l.oz, cost: l.cost })) }));
+  if (!edited) return;
+  await api(`/api/mixes/${m.id}`, { method: "PUT", body: edited });
+  await loadMixes();
+}
+async function addMix() {
+  const name = prompt("Mix name:"); if (!name) return;
+  await api("/api/mixes", { method: "POST", body: JSON.stringify({ name, lines: [] }) });
+  await loadMixes();
+}
+async function delMix(id) {
+  if (!confirm("Delete mix?")) return;
+  await api(`/api/mixes/${id}`, { method: "DELETE" });
+  await loadMixes();
+}
+async function applyMix(code, costPerOz) {
+  const g = (await api("/api/ingredients")).find(i => i.code === code);
+  if (!g) return alert("No ingredient with code " + code);
+  await api(`/api/ingredients/${g.id}`, { method: "PUT", body: JSON.stringify({ costPerUnit: +costPerOz.toFixed(4) }) });
+  alert(`Ingredient ${code} cost set to $${costPerOz.toFixed(4)}/oz`);
+}
+
+// ---- Mappings ----
+async function loadMappings() {
+  const [maps, posItems, prods] = await Promise.all([
+    api("/api/mappings"), api("/api/item-names").catch(() => []), api("/api/products")
+  ]);
+  const mapped = Object.fromEntries(maps.map(m => [m.posName, m]));
+  const names = [...new Set([...posItems, ...maps.map(m => m.posName)])].sort();
+  const prodOpts = c => `<option value="">—</option>` + prods.map(p =>
+    `<option value="${p.code}" ${c === p.code ? "selected" : ""}>${p.code} ${p.name}</option>`).join("");
+  let h = "<tr><th>POS item</th><th>Kind</th><th>Product (BOM)</th><th></th></tr>";
+  for (const n of names) {
+    const m = mapped[n];
+    const kind = m ? m.kind : "product";
+    h += `<tr data-name="${n.replaceAll('"','&quot;')}">
+      <td>${n} ${m ? "" : '<span class="tag warn">unmapped</span>'}</td>
+      <td><select class="map-kind">${["product","zerocost","ignore"].map(k =>
+        `<option ${k === kind ? "selected" : ""}>${k}</option>`).join("")}</select></td>
+      <td><select class="map-prod">${prodOpts(m && m.product ? m.product.code : "")}</select></td>
+      <td><button class="btn" onclick="saveMap(this)">Save</button></td></tr>`;
+  }
+  $("#mapTable").innerHTML = h;
+}
+async function saveMap(btn) {
+  const tr = btn.closest("tr");
+  await api("/api/mappings", { method: "POST", body: JSON.stringify({
+    posName: tr.dataset.name,
+    kind: tr.querySelector(".map-kind").value,
+    productCode: tr.querySelector(".map-prod").value || null
+  })});
+  await loadMappings();
+}
+
+// ---- Settings ----
+async function loadSettings() {
+  const s = await api("/api/settings");
+  $("#setOverhead").value = ((+s.dailyOverheadCents || 0) / 100).toFixed(0);
+  $("#setCardFee").value = s.cardFeePct ?? "8.25";
+  $("#importSrc").textContent = s.importSource || "";
+}
+async function saveSettings() {
+  await api("/api/settings", { method: "PUT", body: JSON.stringify({
+    dailyOverheadCents: Math.round(+$("#setOverhead").value * 100) || 0,
+    cardFeePct: +$("#setCardFee").value || 0
+  })});
+  alert("Saved");
+}
+async function reimport() {
+  if (!confirm("Replace all costing data here with the management site's current data?")) return;
+  const r = await api("/api/import", { method: "POST" });
+  alert(`Imported ${r.ingredients} ingredients, ${r.products} products, ${r.mixes} mixes, ${r.mappings} mappings.`);
+  loadSettings();
+}
+
+if (PIN) tryPin(); else showPin();
+</script>
+</body>
+</html>

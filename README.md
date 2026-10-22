@@ -24,3 +24,7 @@ Default PIN: **2026** (change it in manage.html → Seguridad).
 
 Orders are NOT sales records: the dispatcher still charges on the POS,
 so nothing is double-counted anywhere.
+
+## Ventas & Costos y Ganancias
+- `/ventas` — sales ledger kept only in this app (nothing is written to texasstores).
+- `/costos` — clone of texas-stores-management (ingredients, BOM, mixes, item mapping, overhead, daily/weekly/monthly profit, inventory usage), using the sales above. On first boot it copies the live data from `MGMT_IMPORT_URL` (default: texas-stores-management-test-production) once; Settings → "Import again" re-copies it. If that site is unreachable it seeds from `prisma/mgmt-data.js`.

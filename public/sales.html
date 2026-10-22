@@ -117,7 +117,7 @@
       <text x="196" y="112" class="lw">lero</text>
       <rect x="6" y="128" width="410" height="5" rx="2.5" fill="#ffb300"/>
     </svg><h1>Ventas</h1></div>
-  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
+  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/costos.html">Costos</a><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
 </header>
 
 <div id="pinBox">
@@ -191,7 +191,7 @@
 
   <!-- ============ COSTOS ============ -->
   <section class="pane" id="p-cost">
-    <p class="muted">Pon lo que te cuesta hacer cada producto. Con eso el Resumen calcula la ganancia. Se guarda solo al salir de la casilla. Los cambios aplican a ventas nuevas (las ventas pasadas guardan el costo que tenían).</p>
+    <p class="muted">El costo sale de la receta (BOM) en <a href="/costos.html">Costos y Ganancias</a>. Solo los productos sin receta usan el costo que escribas aquí. Los cambios aplican a ventas nuevas.</p>
     <div class="scroll"><table id="costs" style="margin-top:10px"></table></div>
   </section>
 </main>
@@ -396,14 +396,16 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") hideCharge()
 
 /* ---------- costos ---------- */
 async function loadCosts(){
-  const items = await api("/api/manage/items");
+  const [items, bom] = await Promise.all([api("/api/manage/items"), api("/api/mgmt/unit-costs").catch(() => ({}))]);
   $("#costs").innerHTML = `<tr><th>Producto</th><th class="n">Precio</th><th class="n">Costo</th><th class="n">Ganancia</th><th class="n">Margen</th></tr>` +
     items.filter(i => i.priceCents > 0).map(i => {
-      const c = i.costCents;
-      return `<tr><td>${esc(i.name)}<br><span class="muted">${esc(i.category||"")}</span></td>
+      const b = bom[i.name];
+      const fromBom = b && b.cents != null;
+      const c = fromBom ? b.cents : i.costCents;
+      return `<tr><td>${esc(i.name)}<br><span class="muted">${fromBom ? "receta " + esc(b.product || "sin costo") : esc(i.category||"")}</span></td>
         <td class="n">${money(i.priceCents)}</td>
-        <td class="n">$<input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px;text-align:right"
-            value="${c!=null?(c/100).toFixed(2):""}" placeholder="0.00" onchange="saveCost('${encodeURIComponent(i.name)}',this.value)"></td>
+        <td class="n">${fromBom ? `<a href="/costos.html">${money(c)}</a>` : `$<input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px;text-align:right"
+            value="${c!=null?(c/100).toFixed(2):""}" placeholder="0.00" onchange="saveCost('${encodeURIComponent(i.name)}',this.value)">`}</td>
         <td class="n">${c!=null?money(i.priceCents-c):"—"}</td>
         <td class="n">${c!=null?Math.round((i.priceCents-c)/i.priceCents*100)+"%":"—"}</td></tr>`;
     }).join("");
