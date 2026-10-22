@@ -53,6 +53,7 @@ model ItemInfo {
   imageId     Int?
   hidden      Boolean @default(false)
   description String? // shown in the kiosk popup when the customer taps the item
+  costCents   Int? // manager-entered unit cost, used for profit on the Ventas page
 }
 
 // Uploaded pictures, stored in the database (survives redeploys)
@@ -66,4 +67,38 @@ model Image {
 model Setting {
   key   String @id
   value String
+}
+
+// Sales ledger kept HERE (never in texasstores). One row per charged order or manual sale.
+model Sale {
+  id            Int        @id @default(autoincrement())
+  createdAt     DateTime   @default(now())
+  orderId       Int?       @unique // kiosk order this sale came from (null = manual sale at the Caja)
+  orderNumber   Int?
+  source        String     @default("dispatch") // dispatch | kiosk_card | caja
+  paymentMethod String // cash | credit
+  subtotalCents Int        @default(0) // at regular menu prices
+  discountCents Int        @default(0) // promos
+  totalCents    Int        @default(0) // what the customer paid
+  costCents     Int        @default(0) // sum of item costs at time of sale
+  tenderedCents Int? // cash received (cash sales)
+  changeCents   Int? // change given back
+  squareTxId    String?
+  voided        Boolean    @default(false)
+  voidedAt      DateTime?
+  voidReason    String?
+  items         SaleItem[]
+}
+
+model SaleItem {
+  id             Int    @id @default(autoincrement())
+  saleId         Int
+  sale           Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  itemName       String
+  category       String?
+  qty            Int    @default(1)
+  listPriceCents Int    @default(0) // regular price
+  priceCents     Int    @default(0) // price actually charged per unit
+  lineTotalCents Int    @default(0)
+  unitCostCents  Int    @default(0)
 }

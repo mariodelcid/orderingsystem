@@ -47,7 +47,7 @@
       <text x="196" y="112" class="lw">lero</text>
       <rect x="6" y="128" width="410" height="5" rx="2.5" fill="#ffb300"/>
     </svg><h1>Administración</h1></div>
-  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/">Kiosco</a></div>
+  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/sales.html">Ventas</a><a class="nav" href="/">Kiosco</a></div>
 </header>
 <div id="pinBox">
   <h2>PIN de administrador</h2><br>
@@ -90,6 +90,7 @@
       <label>Square Application ID: <input id="setSquare" placeholder="sq0idp-..." style="width:260px"></label>
       <button class="primary" onclick="saveSettings()">Guardar</button>
     </div>
+    <p class="muted">Las ventas se guardan solo aquí, en la página <a href="/sales.html">Ventas</a>. Este sistema ya no escribe nada en texasstores.</p>
     <p class="muted">Con el Application ID, el kiosco muestra el botón 💳 Tarjeta y abre la app de Square en la tableta. Déjalo vacío para aceptar solo efectivo.<br>
       En developer.squareup.com → tu app → Point of Sale API, registra este Web Callback URL: <b id="cbUrl"></b></p>
   </div>

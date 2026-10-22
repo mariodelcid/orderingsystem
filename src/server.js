@@ -152,40 +152,61 @@ app.get("/api/orders", async (req, res) => {
   }));
 });
 
-// Record a sale in the POS (texasstores) for an order. Deducts POS stock and feeds
-// downstream reports. If kiosk promos made the total lower than POS prices,
-// "Discount" units (negative price in the POS) are added so the recorded total matches.
-// Returns { saleId, totalCents } or throws with a readable message.
-async function recordPosSale(order, pm) {
-  const posItems = await fetchPosItems();
+// ---------------- local sales ledger (lives only in this app) ----------------
+// Sales are recorded ONLY here. Nothing is ever sent to texasstores (it is only read for the menu).
+
+// Midnight in the store's time zone for a YYYY-MM-DD date (handles CST/CDT).
+function tzMidnight(ymd) {
+  const guess = new Date(`${ymd}T12:00:00Z`);
+  const local = new Date(guess.toLocaleString("en-US", { timeZone: TZ }));
+  const utc = new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));
+  const offsetMs = local - utc; // e.g. -5h in CDT
+  return new Date(Date.parse(`${ymd}T00:00:00Z`) - offsetMs);
+}
+function todayYmd() { return new Date().toLocaleDateString("en-CA", { timeZone: TZ }); }
+function addDays(ymd, n) {
+  const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Build sale lines from {itemName, qty, priceCents} lines, snapshotting list price, category and cost.
+async function buildSaleLines(lines) {
+  let posItems = [];
+  try { posItems = await fetchPosItems(); } catch (e) { console.error("items lookup failed", e.message); }
   const byName = Object.fromEntries(posItems.map(i => [i.name, i]));
-  const items = [];
-  let posTotal = 0;
-  for (const li of order.items) {
-    const it = byName[li.itemName];
-    if (!it) throw new Error(`"${li.itemName}" no existe en el POS`);
-    items.push({ itemId: it.id, quantity: li.qty });
-    posTotal += it.priceCents * li.qty;
-  }
-  const disc = byName["Discount"];
-  const diff = posTotal - order.totalCents;
-  let discountCents = 0;
-  if (diff > 0 && disc && disc.priceCents < 0) {
-    const n = Math.round(diff / Math.abs(disc.priceCents));
-    if (n > 0) { items.push({ itemId: disc.id, quantity: n }); discountCents = n * Math.abs(disc.priceCents); }
-  }
-  const expectedTotal = posTotal - discountCents;
-  const body = { items, paymentMethod: pm };
-  // the POS requires the tendered amount for cash sales (exact cash -> no change)
-  if (pm === "cash") body.amountTenderedCents = expectedTotal;
-  const r = await fetch(`${POS_URL}/api/sales`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
+  const infos = await prisma.itemInfo.findMany({ where: { itemName: { in: lines.map(l => l.itemName) } } });
+  const costBy = Object.fromEntries(infos.map(i => [i.itemName, i.costCents || 0]));
+  let subtotal = 0, total = 0, cost = 0;
+  const items = lines.map(l => {
+    const it = byName[l.itemName];
+    const list = it && it.priceCents > 0 ? it.priceCents : l.priceCents;
+    const unitCost = costBy[l.itemName] || 0;
+    subtotal += list * l.qty; total += l.priceCents * l.qty; cost += unitCost * l.qty;
+    return {
+      itemName: l.itemName, category: (it && it.category) || null, qty: l.qty,
+      listPriceCents: list, priceCents: l.priceCents, lineTotalCents: l.priceCents * l.qty, unitCostCents: unitCost
+    };
   });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || `POS error ${r.status}`);
-  return { saleId: j.saleId ?? null, totalCents: j.totalCents ?? null };
+  return { items, subtotal, total, cost };
+}
+
+// Record a charged kiosk order in the local ledger. Idempotent per order.
+async function recordLocalSale(order, pm, extra = {}) {
+  const existing = await prisma.sale.findUnique({ where: { orderId: order.id } });
+  if (existing) return existing;
+  const { items, subtotal, total, cost } = await buildSaleLines(order.items);
+  const tendered = pm === "cash" && extra.tenderedCents >= total ? Math.round(extra.tenderedCents) : null;
+  return prisma.sale.create({
+    data: {
+      createdAt: extra.createdAt || undefined,
+      orderId: order.id, orderNumber: order.number,
+      source: extra.source || "dispatch", paymentMethod: pm,
+      subtotalCents: subtotal, discountCents: Math.max(0, subtotal - total), totalCents: total, costCents: cost,
+      tenderedCents: tendered, changeCents: tendered != null ? tendered - total : null,
+      squareTxId: extra.squareTxId || null,
+      items: { create: items }
+    }
+  });
 }
 
 // Dispatcher charges a cash (pending) order
@@ -198,14 +219,12 @@ app.post("/api/orders/:id/charge", async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
     if (order.status !== "pending")
       return res.status(400).json({ error: `Order already ${order.status}` });
-    let sale;
-    try { sale = await recordPosSale(order, pm); }
-    catch (e) { return res.status(502).json({ error: e.message }); }
+    const sale = await recordLocalSale(order, pm, { source: "dispatch", tenderedCents: +req.body.tenderedCents || null });
     const upd = await prisma.kioskOrder.update({
       where: { id: order.id },
-      data: { status: "charged", paymentMethod: pm, posSaleId: sale.saleId }
+      data: { status: "charged", paymentMethod: pm }
     });
-    res.json({ ok: true, posSaleId: sale.saleId, posTotalCents: sale.totalCents, order: upd });
+    res.json({ ok: true, saleId: sale.id, totalCents: sale.totalCents, order: upd });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -224,12 +243,13 @@ app.post("/api/kiosk/orders/:id/card-paid", async (req, res) => {
     if (order.status !== "awaiting_card")
       return res.status(400).json({ error: `Order already ${order.status}` });
     // The customer already paid in Square: the order must reach dispatch even if the POS is down.
-    let sale = { saleId: null }, posError = null;
-    try { sale = await recordPosSale(order, "credit"); }
-    catch (e) { posError = e.message.slice(0, 200); console.error("POS record failed for card order", order.id, e.message); }
+    // The customer already paid in Square: the order must reach dispatch even if saving the sale fails.
+    let posError = null;
+    try { await recordLocalSale(order, "credit", { source: "kiosk_card", squareTxId: txId }); }
+    catch (e) { posError = ("No se guardó la venta: " + e.message).slice(0, 200); console.error("ledger failed for order", order.id, e.message); }
     const upd = await prisma.kioskOrder.update({
       where: { id: order.id },
-      data: { status: "charged", paymentMethod: "credit", squareTxId: txId, posSaleId: sale.saleId, posError }
+      data: { status: "charged", paymentMethod: "credit", squareTxId: txId, posError }
     });
     res.json({ ok: true, number: upd.number, totalCents: upd.totalCents });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -265,7 +285,13 @@ app.put("/api/orders/:id", async (req, res) => {
     const status = req.body.status;
     if (!["pending", "charged", "ready", "done", "cancelled"].includes(status))
       return res.status(400).json({ error: "Bad status" });
-    res.json(await prisma.kioskOrder.update({ where: { id: +req.params.id }, data: { status } }));
+    const upd = await prisma.kioskOrder.update({ where: { id: +req.params.id }, data: { status } });
+    if (status === "cancelled")
+      await prisma.sale.updateMany({
+        where: { orderId: upd.id, voided: false },
+        data: { voided: true, voidedAt: new Date(), voidReason: "Orden cancelada en despacho" }
+      });
+    res.json(upd);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -281,6 +307,7 @@ app.get("/api/manage/items", async (_req, res) => {
         hidden: !!info.hidden,
         imageId: info.imageId || null,
         description: info.description || null,
+        costCents: info.costCents ?? null,
         hasPromo: !!promoByName[i.name]
       };
     }));
@@ -288,8 +315,9 @@ app.get("/api/manage/items", async (_req, res) => {
 });
 app.put("/api/manage/items", async (req, res) => {
   try {
-    const { itemName, hidden, imageId, description } = req.body;
+    const { itemName, hidden, imageId, description, costCents } = req.body;
     const data = {};
+    if (costCents !== undefined) data.costCents = costCents === null || costCents === "" ? null : Math.max(0, Math.round(+costCents));
     if (hidden !== undefined) data.hidden = !!hidden;
     if (imageId !== undefined) data.imageId = imageId;
     if (description !== undefined) data.description = String(description || "").slice(0, 500) || null;
@@ -354,9 +382,143 @@ app.put("/api/settings", async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// ---------------- Ventas (local ledger, PIN) ----------------
+function parseRange(q) {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  const from = re.test(q.from || "") ? q.from : todayYmd();
+  const to = re.test(q.to || "") ? q.to : from;
+  return { from, to, gte: tzMidnight(from), lt: tzMidnight(addDays(to, 1)) };
+}
+const localDay = d => d.toLocaleDateString("en-CA", { timeZone: TZ });
+const localHour = d => +d.toLocaleString("en-US", { timeZone: TZ, hour: "numeric", hour12: false }) % 24;
+
+app.get("/api/sales/report", async (req, res) => {
+  try {
+    const r = parseRange(req.query);
+    const sales = await prisma.sale.findMany({
+      where: { createdAt: { gte: r.gte, lt: r.lt } },
+      include: { items: true }, orderBy: { id: "desc" }
+    });
+    const t = { count: 0, gross: 0, discounts: 0, net: 0, cash: 0, card: 0, cashCount: 0, cardCount: 0,
+                cost: 0, profit: 0, items: 0, voidedCount: 0, voidedCents: 0, missingCost: 0 };
+    const byItem = {}, byHour = {}, byDay = {}, bySource = {};
+    for (const s of sales) {
+      if (s.voided) { t.voidedCount++; t.voidedCents += s.totalCents; continue; }
+      t.count++; t.gross += s.subtotalCents; t.discounts += s.discountCents; t.net += s.totalCents; t.cost += s.costCents;
+      if (s.paymentMethod === "cash") { t.cash += s.totalCents; t.cashCount++; } else { t.card += s.totalCents; t.cardCount++; }
+      const h = localHour(s.createdAt); byHour[h] = (byHour[h] || 0) + s.totalCents;
+      const d = localDay(s.createdAt); byDay[d] ||= { day: d, count: 0, net: 0, profit: 0 };
+      byDay[d].count++; byDay[d].net += s.totalCents; byDay[d].profit += s.totalCents - s.costCents;
+      bySource[s.source] = (bySource[s.source] || 0) + s.totalCents;
+      for (const i of s.items) {
+        t.items += i.qty;
+        const k = byItem[i.itemName] ||= { name: i.itemName, category: i.category, qty: 0, net: 0, cost: 0, noCost: false };
+        k.qty += i.qty; k.net += i.lineTotalCents; k.cost += i.unitCostCents * i.qty;
+        if (!i.unitCostCents) k.noCost = true;
+      }
+    }
+    t.profit = t.net - t.cost;
+    t.missingCost = Object.values(byItem).filter(i => i.noCost).length;
+    res.json({
+      from: r.from, to: r.to, totals: t,
+      byItem: Object.values(byItem).sort((a, b) => b.net - a.net),
+      byHour: Array.from({ length: 24 }, (_, h) => ({ hour: h, net: byHour[h] || 0 })),
+      byDay: Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day)),
+      bySource,
+      sales: sales.slice(0, 400)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Manual sale from the Caja tab (prices computed server-side, promo-aware). Never touches texasstores.
+app.post("/api/sales", async (req, res) => {
+  try {
+    const wanted = Array.isArray(req.body.items) ? req.body.items : [];
+    const pm = req.body.paymentMethod === "credit" ? "credit" : "cash";
+    const { items, promoByName } = await menuData();
+    const byName = Object.fromEntries(items.map(i => [i.name, i]));
+    const lines = [];
+    for (const w of wanted) {
+      const it = byName[w.name];
+      if (!it || (it.priceCents || 0) <= 0) continue;
+      const qty = Math.max(1, Math.min(99, Math.round(+w.qty || 1)));
+      lines.push({ itemName: it.name, qty, priceCents: promoPrice(it, promoByName[it.name]) });
+    }
+    if (!lines.length) return res.status(400).json({ error: "Agrega al menos un producto" });
+    const built = await buildSaleLines(lines);
+    let tendered = null;
+    if (pm === "cash") {
+      tendered = req.body.tenderedCents == null || req.body.tenderedCents === "" ? built.total : Math.round(+req.body.tenderedCents);
+      if (!(tendered >= built.total)) return res.status(400).json({ error: "El efectivo recibido es menor que el total" });
+    }
+    const sale = await prisma.sale.create({
+      data: {
+        source: "caja", paymentMethod: pm,
+        subtotalCents: built.subtotal, discountCents: Math.max(0, built.subtotal - built.total),
+        totalCents: built.total, costCents: built.cost,
+        tenderedCents: tendered, changeCents: tendered != null ? tendered - built.total : null,
+        items: { create: built.items }
+      },
+      include: { items: true }
+    });
+    res.json(sale);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/api/sales/:id/void", async (req, res) => {
+  try {
+    const s = await prisma.sale.findUnique({ where: { id: +req.params.id } });
+    if (!s) return res.status(404).json({ error: "Venta no encontrada" });
+    if (s.voided) return res.status(400).json({ error: "Ya estaba anulada" });
+    res.json(await prisma.sale.update({
+      where: { id: s.id },
+      data: { voided: true, voidedAt: new Date(), voidReason: String(req.body.reason || "").slice(0, 200) || null }
+    }));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get("/api/sales/csv", async (req, res) => {
+  try {
+    const r = parseRange(req.query);
+    const sales = await prisma.sale.findMany({
+      where: { createdAt: { gte: r.gte, lt: r.lt } }, include: { items: true }, orderBy: { id: "asc" }
+    });
+    const esc = v => `"${String(v ?? "").replaceAll('"', '""')}"`;
+    const $ = c => (c / 100).toFixed(2);
+    const rows = [["venta", "fecha", "hora", "orden", "origen", "pago", "producto", "cant", "precio", "total_linea", "costo_linea", "anulada"]];
+    for (const s of sales) for (const i of s.items) rows.push([
+      s.id, localDay(s.createdAt), s.createdAt.toLocaleTimeString("es-MX", { timeZone: TZ }),
+      s.orderNumber ?? "", s.source, s.paymentMethod === "cash" ? "efectivo" : "tarjeta",
+      i.itemName, i.qty, $(i.priceCents), $(i.lineTotalCents), $(i.unitCostCents * i.qty), s.voided ? "si" : ""
+    ]);
+    res.set("Content-Type", "text/csv; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="ventas_${r.from}_${r.to}.csv"`);
+    res.send("\ufeff" + rows.map(r => r.map(esc).join(",")).join("\n"));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// One-time fill: kiosk orders charged before the ledger existed get a sale row (dated when ordered).
+async function backfillLedger() {
+  try {
+    const orders = await prisma.kioskOrder.findMany({
+      where: { status: { in: ["charged", "ready", "done"] }, paymentMethod: { in: ["cash", "credit"] } },
+      include: { items: true }
+    });
+    const have = new Set((await prisma.sale.findMany({ where: { orderId: { not: null } }, select: { orderId: true } })).map(s => s.orderId));
+    let n = 0;
+    for (const o of orders) {
+      if (have.has(o.id)) continue;
+      await recordLocalSale(o, o.paymentMethod, { source: o.squareTxId ? "kiosk_card" : "dispatch", squareTxId: o.squareTxId, createdAt: o.createdAt });
+      n++;
+    }
+    if (n) console.log(`Ledger backfill: ${n} past orders added`);
+  } catch (e) { console.error("Ledger backfill failed", e.message); }
+}
+
 // Short links: /dispatch and /manage work without ".html"
 app.get("/dispatch", (_req, res) => res.redirect("/dispatch.html"));
 app.get("/manage", (_req, res) => res.redirect("/manage.html"));
+app.get("/ventas", (_req, res) => res.redirect("/sales.html"));
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`));
+app.listen(port, () => { console.log(`Ordering system on :${port} (POS ref: ${POS_URL})`); backfillLedger(); });

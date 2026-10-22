@@ -65,7 +65,7 @@
       <text x="196" y="112" class="lw">lero</text>
       <rect x="6" y="128" width="410" height="5" rx="2.5" fill="#ffb300"/>
     </svg><h1>Órdenes del kiosco</h1></div>
-  <div><span id="clock"></span><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
+  <div><span id="clock"></span><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/sales.html">Ventas</a><a class="nav" href="/">Kiosco</a></div>
 </header>
 <div id="pinBox">
   <h2>PIN de empleado</h2>
@@ -120,7 +120,7 @@ async function load(){
       <div class="order ${o.status}">
         <h2>#${o.number} <span class="status ${o.status}">${o.status==="pending"?"POR COBRAR":"PAGADO"+(o.paymentMethod==="credit"?" 💳":o.paymentMethod==="cash"?" 💵":"")}</span></h2>
         <div class="when">${ago(o.createdAt)} · orden ${o.id}${o.squareTxId?" · pagó en kiosco (Square)":""}</div>
-        ${o.posError?`<div style="background:#ffebee;color:#b71c1c;padding:6px 10px;border-radius:8px;font-size:13px;margin-bottom:6px">⚠️ Pagado con tarjeta, pero NO se registró en el POS: ${o.posError}. Regístralo a mano.</div>`:""}
+        ${o.posError?`<div style="background:#ffebee;color:#b71c1c;padding:6px 10px;border-radius:8px;font-size:13px;margin-bottom:6px">⚠️ Pagado con tarjeta: ${o.posError}. Avísale al administrador.</div>`:""}
         <table>${o.items.map(i=>`<tr><td>${i.qty} × ${i.itemName}</td><td>${money(i.lineTotalCents)}</td></tr>`).join("")}</table>
         ${o.note?`<div style="background:#fff8e1;padding:6px 10px;border-radius:8px;font-size:14px">📝 ${o.note}</div>`:""}
         <div class="tot">Total ${money(o.totalCents)}</div>
@@ -141,7 +141,7 @@ async function charge(id, paymentMethod){
   const r = await api("/api/orders/"+id+"/charge",{method:"POST",body:JSON.stringify({paymentMethod})});
   if (r.error) { alert(r.error); load(); return; }
   // el monto real cobrado en el POS; si no viene, usamos el total de la orden
-  const cents = (r.posTotalCents != null) ? r.posTotalCents
+  const cents = (r.totalCents != null) ? r.totalCents
               : (r.order && r.order.totalCents != null) ? r.order.totalCents
               : (o ? o.totalCents : 0);
   showCharge(cents, paymentMethod, o ? o.number : null);

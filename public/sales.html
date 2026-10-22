@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Chilero — Ventas</title>
+<style>
+  :root { --red:#d32f2f; --yellow:#ffb300; --green:#2e7d32; --blue:#1565c0; --dark:#263238; --muted:#78909c; --line:#eceff1; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:system-ui,sans-serif; background:#eceff1; color:#263238; padding-bottom:env(safe-area-inset-bottom); }
+  header { background:var(--dark); color:#fff; padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top)); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  header h1 { font-size:20px; }
+  .logo { height:36px; width:auto; display:block; flex:0 0 auto; }
+  .logo .lw { font-family:Georgia,'Times New Roman',serif; font-size:104px; font-weight:700; fill:#fff; letter-spacing:1px; }
+  .hdr { display:flex; align-items:center; gap:12px; }
+  a.nav { color:#fff; opacity:.85; margin-left:14px; text-decoration:none; font-size:14px; }
+  nav.tabs { display:flex; gap:6px; padding:10px 16px 0; max-width:1100px; margin:0 auto; }
+  nav.tabs button { flex:1; border:none; background:#cfd8dc; color:#37474f; font-size:16px; font-weight:800; padding:12px 8px; border-radius:12px 12px 0 0; cursor:pointer; }
+  nav.tabs button.on { background:#fff; color:var(--dark); }
+  main { max-width:1100px; margin:0 auto; padding:0 16px 24px; }
+  .pane { background:#fff; border-radius:0 0 14px 14px; padding:16px; display:none; }
+  .pane.on { display:block; }
+  h2 { font-size:18px; margin:22px 0 10px; }
+  h2:first-child { margin-top:4px; }
+  .muted { color:var(--muted); font-size:13px; }
+  button { border:none; border-radius:10px; padding:9px 14px; font-size:14px; font-weight:700; cursor:pointer; background:var(--line); color:#263238; }
+  button.primary { background:var(--green); color:#fff; }
+  button.warn { background:#ffcdd2; color:#b71c1c; }
+  input, select { padding:9px; border:1px solid #cfd8dc; border-radius:10px; font-size:15px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  th { font-size:12px; color:var(--muted); font-weight:700; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+
+  /* rango de fechas */
+  .range { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .range button.on { background:var(--dark); color:#fff; }
+  .range input[type=date] { padding:7px; font-size:14px; }
+
+  /* números grandes */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:14px; }
+  .kpi { border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .kpi .v { font-size:26px; font-weight:900; font-variant-numeric:tabular-nums; }
+  .kpi .l { font-size:13px; color:var(--muted); margin-top:2px; }
+  .kpi.big { grid-column:span 2; background:var(--dark); color:#fff; border-color:var(--dark); }
+  .kpi.big .v { font-size:40px; }
+  .kpi.big .l { color:#b0bec5; }
+  .kpi.cash .v { color:var(--green); } .kpi.card .v { color:var(--blue); }
+  @media (max-width:420px){ .kpi.big { grid-column:1/-1; } }
+
+  /* barras por hora */
+  .hours { display:flex; align-items:flex-end; gap:3px; height:130px; padding-top:8px; border-bottom:1px solid #cfd8dc; }
+  .hours div { flex:1; background:var(--yellow); border-radius:4px 4px 0 0; min-height:1px; position:relative; }
+  .hours div.z { background:var(--line); }
+  .hlab { display:flex; gap:3px; font-size:10px; color:var(--muted); }
+  .hlab span { flex:1; text-align:center; }
+
+  .pill { font-size:11px; font-weight:800; padding:3px 8px; border-radius:99px; white-space:nowrap; }
+  .p-cash { background:#c8e6c9; color:#1b5e20; } .p-card { background:#bbdefb; color:#0d47a1; }
+  .p-void { background:#ffcdd2; color:#b71c1c; }
+  tr.void td { color:#b0bec5; text-decoration:line-through; }
+  tr.void td:last-child, tr.void td:first-child { text-decoration:none; }
+  tr.det td { background:#fafafa; font-size:13px; }
+  tr.sale { cursor:pointer; }
+
+  /* caja */
+  .reg { display:grid; grid-template-columns:1fr 340px; gap:16px; }
+  @media (max-width:800px){ .reg { grid-template-columns:1fr; } }
+  .cat { font-size:13px; font-weight:800; color:var(--muted); margin:12px 0 6px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
+  .itm { background:#fff8e1; border:1px solid #ffe082; border-radius:12px; padding:10px; text-align:left; min-height:70px; display:flex; flex-direction:column; justify-content:space-between; }
+  .itm b { font-size:14px; line-height:1.2; }
+  .itm span { font-size:14px; font-weight:800; color:#6d4c41; }
+  .itm s { color:var(--muted); font-weight:400; font-size:12px; }
+  .cart { border:1px solid var(--line); border-radius:14px; padding:14px; align-self:start; position:sticky; top:10px; }
+  .cl { display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+  .cl .nm { flex:1; }
+  .cl button { padding:4px 10px; }
+  .tot { display:flex; justify-content:space-between; font-size:24px; font-weight:900; margin:10px 0; }
+  .pay { display:flex; gap:8px; margin:8px 0; }
+  .pay button { flex:1; padding:12px; font-size:16px; }
+  .pay button.on.cash { background:var(--green); color:#fff; }
+  .pay button.on.card { background:var(--blue); color:#fff; }
+  .quick { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; }
+  .quick button { padding:8px 10px; }
+  .change { font-size:20px; font-weight:800; margin:8px 0; }
+  .go { width:100%; padding:16px; font-size:20px; }
+  #toCart { display:none; }
+  @media (max-width:800px){
+    #toCart.show { display:flex; position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:50;
+      justify-content:space-between; background:var(--dark); color:#fff; font-size:18px; padding:14px 18px; border-radius:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
+  }
+
+  #pinBox { max-width:320px; margin:120px auto; background:#fff; border-radius:14px; padding:24px; text-align:center; }
+  #pinBox input { font-size:28px; width:150px; text-align:center; margin:12px 0; }
+  #pinBox button { background:var(--dark); color:#fff; }
+
+  #chargeScreen { position:fixed; inset:0; z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:#fff; padding:2vh 3vw; cursor:pointer; user-select:none; -webkit-user-select:none; }
+  #chargeScreen.show { display:flex; }
+  #chargeScreen.cash { background:#0f9d28; } #chargeScreen.card { background:#d32f2f; }
+  #csMethod { font-size:clamp(22px,6vw,72px); font-weight:800; letter-spacing:.1em; }
+  #csAmount { font-size:clamp(80px,24vw,480px); font-weight:900; line-height:.95; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #csChange { font-size:clamp(22px,6vw,72px); font-weight:800; margin-top:1vh; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hdr"><svg class="logo" width="430" height="150" viewBox="0 0 430 150" aria-label="Chilero">
+      <text x="150" y="112" text-anchor="end" class="lw">Ch</text>
+      <g transform="translate(146 16)">
+        <path d="M20 30 C20 18 16 10 9 5" stroke="#3f7d20" stroke-width="7" stroke-linecap="round" fill="none"/>
+        <path d="M21 30 C12 26 7 18 9 9 C19 9 25 18 25 29 Z" fill="#4c9a2a"/>
+        <path d="M21 28 C33 30 38 42 37 58 C36 78 30 96 22 108 C19 112 12 111 12 105 C12 100 15 96 18 90 C24 78 27 64 26 51 C25 40 23 33 20 29 Z" fill="#e53935"/>
+        <path d="M28 42 C33 50 34 62 32 72" stroke="#ff8a7d" stroke-width="4" stroke-linecap="round" fill="none" opacity=".7"/>
+      </g>
+      <text x="196" y="112" class="lw">lero</text>
+      <rect x="6" y="128" width="410" height="5" rx="2.5" fill="#ffb300"/>
+    </svg><h1>Ventas</h1></div>
+  <div><a class="nav" href="/dispatch.html">Órdenes</a><a class="nav" href="/manage.html">Administrar</a><a class="nav" href="/">Kiosco</a></div>
+</header>
+
+<div id="pinBox">
+  <h2>PIN de administrador</h2>
+  <input id="pin" type="password" inputmode="numeric" maxlength="8">
+  <br><button onclick="tryPin()">Entrar</button>
+</div>
+
+<div id="app" style="display:none">
+<nav class="tabs">
+  <button data-t="res" class="on" onclick="tab('res')">📊 Resumen</button>
+  <button data-t="caja" onclick="tab('caja')">🧾 Caja</button>
+  <button data-t="cost" onclick="tab('cost')">💲 Costos</button>
+</nav>
+<main>
+
+  <!-- ============ RESUMEN ============ -->
+  <section class="pane on" id="p-res">
+    <div class="range">
+      <button data-r="today" class="on" onclick="quick('today')">Hoy</button>
+      <button data-r="yday" onclick="quick('yday')">Ayer</button>
+      <button data-r="7" onclick="quick('7')">7 días</button>
+      <button data-r="month" onclick="quick('month')">Este mes</button>
+      <input type="date" id="from" onchange="custom()"> <span class="muted">a</span> <input type="date" id="to" onchange="custom()">
+      <button onclick="csv()" title="Descargar para Excel">⬇️ CSV</button>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <h2>Ventas por hora</h2>
+    <div class="hours" id="hours"></div>
+    <div class="hlab" id="hlab"></div>
+
+    <div id="daysWrap" style="display:none">
+      <h2>Por día</h2>
+      <div class="scroll"><table id="days"></table></div>
+    </div>
+
+    <h2>Por producto</h2>
+    <p class="muted" id="costNote"></p>
+    <div class="scroll"><table id="byItem"></table></div>
+
+    <h2>Transacciones</h2>
+    <p class="muted">Toca una venta para ver el detalle.</p>
+    <div class="scroll"><table id="sales"></table></div>
+  </section>
+
+  <!-- ============ CAJA ============ -->
+  <section class="pane" id="p-caja">
+    <p class="muted" style="margin-bottom:8px">Venta manual. Se guarda solo en este sistema — no toca texasstores.</p>
+    <div class="reg">
+      <div id="menu"></div>
+      <div class="cart" id="cart">
+        <div id="cartLines"><p class="muted">Toca un producto para agregarlo.</p></div>
+        <div class="tot"><span>Total</span><span id="cartTot">$0.00</span></div>
+        <div class="pay">
+          <button class="cash on" id="pmCash" onclick="setPm('cash')">💵 Efectivo</button>
+          <button class="card" id="pmCard" onclick="setPm('credit')">💳 Tarjeta</button>
+        </div>
+        <div id="cashBox">
+          <label class="muted">Efectivo recibido</label>
+          <input id="tendered" type="number" inputmode="decimal" step="0.01" placeholder="exacto" style="width:100%" oninput="drawChange()">
+          <div class="quick" id="quickCash"></div>
+          <div class="change" id="change"></div>
+        </div>
+        <button class="primary go" onclick="ring()">Cobrar</button>
+        <button style="width:100%;margin-top:8px" onclick="clearCart()">Vaciar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ COSTOS ============ -->
+  <section class="pane" id="p-cost">
+    <p class="muted">Pon lo que te cuesta hacer cada producto. Con eso el Resumen calcula la ganancia. Se guarda solo al salir de la casilla. Los cambios aplican a ventas nuevas (las ventas pasadas guardan el costo que tenían).</p>
+    <div class="scroll"><table id="costs" style="margin-top:10px"></table></div>
+  </section>
+</main>
+</div>
+
+<button id="toCart" onclick="$('#cart').scrollIntoView({behavior:'smooth'})"><span id="toCartN"></span><b id="toCartT"></b></button>
+
+<div id="chargeScreen" onclick="hideCharge()">
+  <div id="csMethod"></div>
+  <div id="csAmount"></div>
+  <div id="csChange"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const money = c => (c < 0 ? "−$" : "$") + (Math.abs(c)/100).toFixed(2);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let PIN = localStorage.getItem("pin") || "";
+let RANGE = { from:null, to:null }, REPORT = null, MENU = [], CART = [], PM = "cash", OPEN = new Set();
+
+async function api(url, opt = {}) {
+  opt.headers = { "Content-Type":"application/json", "x-pin":PIN, ...(opt.headers||{}) };
+  const r = await fetch(url, opt);
+  if (r.status === 401) { showPin(); throw new Error("pin"); }
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || "Error"); throw new Error(j.error); }
+  return j;
+}
+function showPin(){ $("#pinBox").style.display = "block"; $("#app").style.display = "none"; }
+async function tryPin(){
+  PIN = $("#pin").value || PIN;
+  const r = await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pin:PIN})}).then(r=>r.json());
+  if (r.ok){ localStorage.setItem("pin",PIN); $("#pinBox").style.display="none"; $("#app").style.display="block"; quick("today"); loadMenu(); }
+  else { localStorage.removeItem("pin"); showPin(); if ($("#pin").value) alert("PIN incorrecto"); }
+}
+function tab(t){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "p-" + t));
+  drawCart();
+  if (t === "res") load();
+  if (t === "cost") loadCosts();
+}
+
+/* ---------- fechas (hora de Texas) ---------- */
+const ymd = d => d.toLocaleDateString("en-CA", { timeZone:"America/Chicago" });
+function shift(s, n){ const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+function quick(k){
+  const today = ymd(new Date());
+  if (k === "today") RANGE = { from:today, to:today };
+  if (k === "yday") { const y = shift(today,-1); RANGE = { from:y, to:y }; }
+  if (k === "7") RANGE = { from:shift(today,-6), to:today };
+  if (k === "month") RANGE = { from:today.slice(0,8) + "01", to:today };
+  document.querySelectorAll(".range button[data-r]").forEach(b => b.classList.toggle("on", b.dataset.r === k));
+  $("#from").value = RANGE.from; $("#to").value = RANGE.to;
+  load();
+}
+function custom(){
+  let f = $("#from").value, t = $("#to").value || f;
+  if (!f) return;
+  if (t < f) [f, t] = [t, f];
+  RANGE = { from:f, to:t };
+  document.querySelectorAll(".range button[data-r]").forEach(b => b.classList.remove("on"));
+  load();
+}
+
+/* ---------- resumen ---------- */
+async function load(){
+  try { REPORT = await api(`/api/sales/report?from=${RANGE.from}&to=${RANGE.to}`); } catch(e){ return; }
+  const t = REPORT.totals;
+  const avg = t.count ? Math.round(t.net / t.count) : 0;
+  const hasCost = t.cost > 0;
+  $("#kpis").innerHTML = `
+    <div class="kpi big"><div class="v">${money(t.net)}</div><div class="l">Venta neta · ${t.count} ${t.count===1?"venta":"ventas"} · ${t.items} productos</div></div>
+    <div class="kpi cash"><div class="v">${money(t.cash)}</div><div class="l">💵 Efectivo (${t.cashCount})</div></div>
+    <div class="kpi card"><div class="v">${money(t.card)}</div><div class="l">💳 Tarjeta (${t.cardCount})</div></div>
+    <div class="kpi"><div class="v">${money(avg)}</div><div class="l">Ticket promedio</div></div>
+    <div class="kpi"><div class="v">${hasCost ? money(t.profit) : "—"}</div><div class="l">Ganancia${hasCost && t.net ? " · " + Math.round(t.profit/t.net*100) + "%" : ""}</div></div>
+    <div class="kpi"><div class="v">${hasCost ? money(t.cost) : "—"}</div><div class="l">Costo de producto</div></div>
+    <div class="kpi"><div class="v">${money(t.discounts)}</div><div class="l">Descuentos (promos)</div></div>
+    <div class="kpi"><div class="v">${t.voidedCount}</div><div class="l">Anuladas (${money(t.voidedCents)})</div></div>`;
+
+  // por hora: solo de 7am a 11pm, más horas si hubo ventas fuera
+  const used = REPORT.byHour.filter(h => h.net > 0).map(h => h.hour);
+  const lo = Math.min(7, ...used), hi = Math.max(22, ...used);
+  const hrs = REPORT.byHour.slice(lo, hi + 1);
+  const mx = Math.max(1, ...hrs.map(h => h.net));
+  $("#hours").innerHTML = hrs.map(h => `<div class="${h.net?"":"z"}" style="height:${Math.max(1, h.net/mx*100)}%" title="${h.hour}:00 · ${money(h.net)}"></div>`).join("");
+  $("#hlab").innerHTML = hrs.map(h => `<span>${h.hour % 3 === 0 ? (h.hour % 12 || 12) + (h.hour < 12 ? "a" : "p") : ""}</span>`).join("");
+
+  $("#daysWrap").style.display = REPORT.from !== REPORT.to ? "block" : "none";
+  $("#days").innerHTML = `<tr><th>Día</th><th class="n">Ventas</th><th class="n">Neto</th><th class="n">Ganancia</th></tr>` +
+    REPORT.byDay.map(d => `<tr><td>${new Date(d.day+"T12:00:00").toLocaleDateString("es-MX",{weekday:"short",day:"numeric",month:"short"})}</td><td class="n">${d.count}</td><td class="n">${money(d.net)}</td><td class="n">${hasCost?money(d.profit):"—"}</td></tr>`).join("");
+
+  $("#costNote").innerHTML = t.missingCost ? `⚠️ ${t.missingCost} producto(s) sin costo: su ganancia aparece igual a la venta. Llénalos en <a href="#" onclick="tab('cost');return false">Costos</a>.` : "";
+  $("#byItem").innerHTML = `<tr><th>Producto</th><th class="n">Cant.</th><th class="n">Venta</th><th class="n">Costo</th><th class="n">Ganancia</th><th class="n">%</th></tr>` +
+    (REPORT.byItem.length ? REPORT.byItem.map(i => `<tr><td>${esc(i.name)}${i.noCost?' <span class="muted">(sin costo)</span>':""}</td><td class="n">${i.qty}</td><td class="n">${money(i.net)}</td><td class="n">${money(i.cost)}</td><td class="n">${money(i.net-i.cost)}</td><td class="n">${t.net?Math.round(i.net/t.net*100):0}%</td></tr>`).join("")
+      : `<tr><td colspan=6 class="muted">Sin ventas en estas fechas.</td></tr>`);
+  drawSales();
+}
+const SRC = { dispatch:"Despacho", kiosk_card:"Kiosco (Square)", caja:"Caja" };
+function drawSales(){
+  const multi = REPORT.from !== REPORT.to;
+  $("#sales").innerHTML = `<tr><th>#</th><th>Hora</th><th>Origen</th><th>Pago</th><th class="n">Total</th><th></th></tr>` +
+    (REPORT.sales.length ? REPORT.sales.map(s => {
+      const d = new Date(s.createdAt);
+      const when = (multi ? d.toLocaleDateString("es-MX",{day:"numeric",month:"short",timeZone:"America/Chicago"}) + " " : "") +
+                   d.toLocaleTimeString("es-MX",{hour:"numeric",minute:"2-digit",timeZone:"America/Chicago"});
+      const row = `<tr class="sale ${s.voided?"void":""}" onclick="toggle(${s.id})">
+        <td>${s.id}</td><td>${when}</td>
+        <td>${SRC[s.source]||s.source}${s.orderNumber?` · orden #${s.orderNumber}`:""}</td>
+        <td>${s.voided?'<span class="pill p-void">ANULADA</span>':s.paymentMethod==="cash"?'<span class="pill p-cash">EFECTIVO</span>':'<span class="pill p-card">TARJETA</span>'}</td>
+        <td class="n"><b>${money(s.totalCents)}</b></td>
+        <td class="n">${s.voided?"":`<button class="warn" title="Anular" onclick="event.stopPropagation();voidSale(${s.id})">✕</button>`}</td></tr>`;
+      if (!OPEN.has(s.id)) return row;
+      const lines = s.items.map(i => `${i.qty} × ${esc(i.itemName)} — ${money(i.lineTotalCents)}${i.priceCents<i.listPriceCents?` <span class="muted">(promo, normal ${money(i.listPriceCents)})</span>`:""}`).join("<br>");
+      const extra = [
+        s.discountCents ? `Descuento ${money(s.discountCents)}` : "",
+        s.tenderedCents != null ? `Recibió ${money(s.tenderedCents)} · Cambio ${money(s.changeCents)}` : "",
+        s.costCents ? `Costo ${money(s.costCents)} · Ganancia ${money(s.totalCents - s.costCents)}` : "",
+        s.squareTxId ? `Square: ${esc(s.squareTxId)}` : "",
+        s.voided ? `Anulada${s.voidReason ? ": " + esc(s.voidReason) : ""}` : ""
+      ].filter(Boolean).join(" · ");
+      return row + `<tr class="det"><td></td><td colspan=5>${lines}${extra?`<div class="muted" style="margin-top:4px">${extra}</div>`:""}</td></tr>`;
+    }).join("") : `<tr><td colspan=6 class="muted">Sin ventas en estas fechas.</td></tr>`);
+}
+function toggle(id){ OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); drawSales(); }
+async function voidSale(id){
+  const reason = prompt(`¿Anular la venta ${id}? Escribe el motivo:`);
+  if (reason === null) return;
+  await api(`/api/sales/${id}/void`, { method:"POST", body:JSON.stringify({ reason }) });
+  load();
+}
+async function csv(){
+  const r = await fetch(`/api/sales/csv?from=${RANGE.from}&to=${RANGE.to}`, { headers:{ "x-pin":PIN } });
+  if (!r.ok) return alert("No se pudo descargar");
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a"); a.href = url; a.download = `ventas_${RANGE.from}_${RANGE.to}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/* ---------- caja ---------- */
+async function loadMenu(){
+  const r = await fetch("/api/kiosk/menu").then(r => r.json());
+  MENU = r.items || [];
+  const cats = {};
+  MENU.forEach(i => (cats[i.category] ||= []).push(i));
+  $("#menu").innerHTML = Object.entries(cats).map(([c, items]) => `<div class="cat">${esc(c)}</div><div class="grid">` +
+    items.map(i => { const p = i.promo ? i.promo.promoPriceCents : i.priceCents;
+      return `<button class="itm" onclick="add('${encodeURIComponent(i.name)}')"><b>${esc(i.name)}</b><span>${money(p)} ${i.promo?`<s>${money(i.priceCents)}</s>`:""}</span></button>`; }).join("") +
+    `</div>`).join("");
+  drawCart();
+}
+const unit = name => { const i = MENU.find(m => m.name === name); return i ? (i.promo ? i.promo.promoPriceCents : i.priceCents) : 0; };
+const cartTotal = () => CART.reduce((s, l) => s + unit(l.name) * l.qty, 0);
+function add(enc){ const name = decodeURIComponent(enc); const l = CART.find(x => x.name === name); l ? l.qty++ : CART.push({ name, qty:1 }); drawCart(); }
+function qty(i, d){ CART[i].qty += d; if (CART[i].qty <= 0) CART.splice(i, 1); drawCart(); }
+function clearCart(){ CART = []; $("#tendered").value = ""; drawCart(); }
+function setPm(pm){ PM = pm; $("#pmCash").classList.toggle("on", pm==="cash"); $("#pmCard").classList.toggle("on", pm==="credit"); $("#cashBox").style.display = pm==="cash" ? "block" : "none"; }
+function drawCart(){
+  $("#cartLines").innerHTML = CART.length ? CART.map((l, i) => `<div class="cl"><span class="nm">${esc(l.name)}</span>
+      <button onclick="qty(${i},-1)">−</button><b>${l.qty}</b><button onclick="qty(${i},1)">+</button>
+      <span style="width:70px;text-align:right">${money(unit(l.name)*l.qty)}</span></div>`).join("")
+    : `<p class="muted">Toca un producto para agregarlo.</p>`;
+  const tot = cartTotal();
+  $("#cartTot").textContent = money(tot);
+  const n = CART.reduce((s, l) => s + l.qty, 0);
+  $("#toCart").classList.toggle("show", n > 0 && $("#p-caja").classList.contains("on"));
+  $("#toCartN").textContent = `Ver cuenta · ${n} ${n===1?"producto":"productos"}`; $("#toCartT").textContent = money(tot);
+  const bills = [...new Set([tot, ...[500,1000,2000,5000,10000].filter(b => b > tot)])].slice(0, 5);
+  $("#quickCash").innerHTML = tot ? bills.map(b => `<button onclick="$('#tendered').value=${(b/100).toFixed(2)};drawChange()">${b===tot?"Exacto":money(b)}</button>`).join("") : "";
+  drawChange();
+}
+function drawChange(){
+  const tot = cartTotal(), v = $("#tendered").value;
+  if (!tot || v === "") { $("#change").textContent = ""; return; }
+  const c = Math.round(parseFloat(v) * 100) - tot;
+  $("#change").innerHTML = c >= 0 ? `Cambio: <span style="color:var(--green)">${money(c)}</span>` : `<span style="color:var(--red)">Faltan ${money(-c)}</span>`;
+}
+async function ring(){
+  if (!CART.length) return alert("Agrega productos primero");
+  const v = $("#tendered").value;
+  const body = { items:CART, paymentMethod:PM };
+  if (PM === "cash" && v !== "") body.tenderedCents = Math.round(parseFloat(v) * 100);
+  const s = await api("/api/sales", { method:"POST", body:JSON.stringify(body) });
+  showCharge(s);
+  clearCart();
+}
+
+/* ---------- pantalla de cobro ---------- */
+let csTimer = null;
+function showCharge(s){
+  const cash = s.paymentMethod === "cash";
+  const el = $("#chargeScreen");
+  el.className = (cash ? "cash" : "card") + " show";
+  $("#csMethod").textContent = cash ? "💵 Efectivo" : "💳 Tarjeta";
+  $("#csAmount").textContent = money(s.totalCents);
+  $("#csChange").textContent = cash && s.changeCents ? "Cambio " + money(s.changeCents) : "";
+  clearTimeout(csTimer); csTimer = setTimeout(hideCharge, 12000);
+}
+function hideCharge(){ clearTimeout(csTimer); $("#chargeScreen").className = ""; }
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideCharge(); });
+
+/* ---------- costos ---------- */
+async function loadCosts(){
+  const items = await api("/api/manage/items");
+  $("#costs").innerHTML = `<tr><th>Producto</th><th class="n">Precio</th><th class="n">Costo</th><th class="n">Ganancia</th><th class="n">Margen</th></tr>` +
+    items.filter(i => i.priceCents > 0).map(i => {
+      const c = i.costCents;
+      return `<tr><td>${esc(i.name)}<br><span class="muted">${esc(i.category||"")}</span></td>
+        <td class="n">${money(i.priceCents)}</td>
+        <td class="n">$<input type="number" inputmode="decimal" step="0.01" min="0" style="width:84px;text-align:right"
+            value="${c!=null?(c/100).toFixed(2):""}" placeholder="0.00" onchange="saveCost('${encodeURIComponent(i.name)}',this.value)"></td>
+        <td class="n">${c!=null?money(i.priceCents-c):"—"}</td>
+        <td class="n">${c!=null?Math.round((i.priceCents-c)/i.priceCents*100)+"%":"—"}</td></tr>`;
+    }).join("");
+}
+async function saveCost(enc, v){
+  const costCents = v === "" ? null : Math.round(parseFloat(v) * 100);
+  await api("/api/manage/items", { method:"PUT", body:JSON.stringify({ itemName:decodeURIComponent(enc), costCents }) });
+  loadCosts();
+}
+
+setPm("cash");
+if (PIN) tryPin(); else showPin();
+</script>
+</body>
+</html>
