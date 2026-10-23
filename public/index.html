@@ -109,15 +109,13 @@
   #thanks .eye { transform-box:fill-box; transform-origin:center; animation:blink 4.2s linear both; }
   #thanks .open { animation:openE 4.2s step-end both; }
   #thanks .shut { opacity:0; animation:shutE 4.2s step-end both; }
-  #thanks .eyes { animation:look 4.2s ease-in-out both; }
-  #thanks h1 { position:absolute; left:0; right:0; bottom:7vh; text-align:center; color:#8ff4ff; font-weight:900;
-    font-size:clamp(50px,13vw,170px); text-shadow:0 0 18px #18c8ff, 0 0 46px #0091ea; animation:pop .6s cubic-bezier(.2,1.6,.4,1) both; }
-  /* Mira a los lados, parpadea, hace reverencia con los ojos cerrados, regresa y vuelve a parpadear */
-  @keyframes look { 0%,6% { transform:translateX(0) } 10%,15% { transform:translateX(-40px) } 19%,24% { transform:translateX(40px) } 28%,100% { transform:translateX(0) } }
-  @keyframes blink { 0%,2%,6%,82%,86%,100% { transform:scaleY(1) } 4%,84% { transform:scaleY(.08) } }
+  #thanks h1 { position:absolute; left:0; right:0; bottom:5vh; line-height:1.05; text-align:center; color:#8ff4ff; font-weight:900;
+    font-size:clamp(44px,11vw,150px); text-shadow:0 0 18px #18c8ff, 0 0 46px #0091ea; animation:pop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  /* Parpadea dos veces, hace reverencia con los ojos cerrados, regresa y vuelve a parpadear */
+  @keyframes blink { 0%,6%,10%,18%,22%,100% { transform:scaleY(1) } 8%,20% { transform:scaleY(.08) } }
   @keyframes openE { 0% { opacity:1 } 34% { opacity:0 } 72% { opacity:1 } }
   @keyframes shutE { 0% { opacity:0 } 34% { opacity:1 } 72% { opacity:0 } }
-  @keyframes bow { 0%,30% { transform:translateY(0) } 44%,62% { transform:translateY(13vh) } 76%,100% { transform:translateY(0) } }
+  @keyframes bow { 0%,30% { transform:translateY(0) } 44%,62% { transform:translateY(10vh) } 76%,100% { transform:translateY(0) } }
   @keyframes pop { from { transform:scale(.3); opacity:0 } to { transform:scale(1); opacity:1 } }
 </style>
 </head>
@@ -465,7 +463,7 @@ setInterval(loadMenu, 5*60*1000);
     </g>
     <path class="glow" fill="#8ff4ff" d="M330 560 Q500 600 670 560 Q640 730 500 735 Q360 730 330 560 Z"/>
   </svg>
-  <h1>¡Gracias!</h1>
+  <h1>Thank you!<br>¡Gracias!</h1>
 </div>
 </body>
 </html>
