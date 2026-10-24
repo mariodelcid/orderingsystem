@@ -112,13 +112,11 @@
   #thanks .num { display:block; color:#fff; font-size:clamp(22px,4.5vw,54px); margin-top:1vh; }
   #thanks .num b { color:#ffd54f; font-size:1.5em; }
   #thanks .cwrap { transition:transform .9s cubic-bezier(.3,1.3,.5,1); }
-  #thanks .cookie { position:relative; width:1em; height:1em; line-height:1; font-size:min(72vw,42vh);
-    font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif;
-    filter:drop-shadow(0 18px 24px rgba(0,0,0,.45)); animation:wiggle 1.6s ease-in-out infinite; }
-  #thanks .half { position:absolute; inset:0; text-align:center; transform-origin:50% 85%;
-    transition:transform .9s cubic-bezier(.3,1.4,.5,1); }
-  #thanks .half.L { clip-path:inset(-30% 50% -30% -30%); }
-  #thanks .half.R { clip-path:inset(-30% -30% -30% 50%); }
+  #thanks .cookie { display:block; width:min(88vw,62vh); height:auto; overflow:visible;
+    filter:drop-shadow(0 22px 26px rgba(0,0,0,.45)); animation:wiggle 1.6s ease-in-out infinite; }
+  #thanks .half { transform-box:view-box; transform-origin:330px 370px; transition:transform .9s cubic-bezier(.3,1.4,.5,1); }
+  #thanks .slip { transition:opacity .2s; }
+  #thanks.opened .slip { opacity:0; }
   #thanks .fortune { position:absolute; left:50%; top:38%; z-index:2; width:min(90vw,1000px); transform:translate(-50%,-50%) scaleX(0);
     background:#fffdf5; color:#b71c1c; border-radius:6px; padding:3vh 4vw; box-sizing:border-box; text-align:center;
     box-shadow:0 10px 30px rgba(0,0,0,.4); transition:transform .7s cubic-bezier(.2,1.3,.4,1) .45s; }
@@ -133,8 +131,8 @@
   /* Abierta: la galleta se parte, sale el papelito */
   #thanks.opened .cookie { animation:crack .35s ease-in-out 1; }
   #thanks.opened .cwrap { transform:translateY(32%) scale(.75); }
-  #thanks.opened .half.L { transform:translateX(-14%) rotate(-24deg); }
-  #thanks.opened .half.R { transform:translateX(14%) rotate(24deg); }
+  #thanks.opened .half.L { transform:translate(-70px,20px) rotate(-26deg); }
+  #thanks.opened .half.R { transform:translate(70px,20px) rotate(26deg); }
   #thanks.opened .fortune { transform:translate(-50%,-50%) scaleX(1); }
   #thanks.opened .legend, #thanks.opened .hand { display:none; }
   #thanks.opened .next { display:block; }
@@ -516,7 +514,31 @@ setInterval(loadMenu, 5*60*1000);
 <div id="thanks" onclick="tapCookie()">
   <div class="ty">¡Gracias! · Thank you!<span class="num">Tu número · Your number <b id="thanksNum"></b></span></div>
   <div class="stage">
-    <div class="cwrap"><div class="cookie"><span class="half L">🥠</span><span class="half R">🥠</span></div></div>
+    <div class="cwrap"><svg class="cookie" viewBox="0 0 600 450" aria-hidden="true">
+      <defs>
+        <radialGradient id="ckBack" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="#ffd98a"/><stop offset=".6" stop-color="#e9a443"/><stop offset="1" stop-color="#b8691c"/></radialGradient>
+        <radialGradient id="ckFront" cx=".45" cy=".3" r=".8"><stop offset="0" stop-color="#ffecb8"/><stop offset=".55" stop-color="#f5bd5c"/><stop offset="1" stop-color="#c97e26"/></radialGradient>
+        <linearGradient id="ckIn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c2a06"/><stop offset="1" stop-color="#a35512"/></linearGradient>
+      </defs>
+      <!-- mitad de atrás (izquierda) -->
+      <g class="half L">
+        <path d="M322 92 C220 58 88 118 60 250 C48 312 66 360 92 386 C150 350 232 334 314 352 C290 280 288 170 322 92 Z" fill="url(#ckBack)" stroke="#9a5310" stroke-width="7" stroke-linejoin="round"/>
+        <path d="M100 235 C112 168 165 118 240 100" fill="none" stroke="#fff3cf" stroke-width="15" stroke-linecap="round" opacity=".55"/>
+        <path d="M96 382 C152 352 232 338 312 354 C232 350 155 362 96 382 Z" fill="url(#ckIn)"/>
+      </g>
+      <!-- mitad de enfrente (derecha) -->
+      <g class="half R">
+        <path d="M322 92 C425 66 545 148 556 262 C562 330 546 378 524 400 C472 364 392 348 316 354 C288 282 286 172 322 92 Z" fill="url(#ckFront)" stroke="#9a5310" stroke-width="7" stroke-linejoin="round"/>
+        <path d="M322 92 C292 172 290 282 316 354" fill="none" stroke="#7a3d0c" stroke-width="9" stroke-linecap="round" opacity=".75"/>
+        <path d="M368 124 C432 108 498 150 524 222" fill="none" stroke="#fff8e1" stroke-width="16" stroke-linecap="round" opacity=".65"/>
+        <path d="M318 354 C394 348 474 364 524 400 C470 380 394 366 318 362 Z" fill="url(#ckIn)"/>
+      </g>
+      <!-- papelito saliendo del hueco -->
+      <g class="slip">
+        <path d="M392 360 L452 362 L470 440 L404 438 Z" fill="#fffdf5" stroke="#cfc4bf" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M414 386 l36 1 M416 404 l30 1" stroke="#c62828" stroke-width="6" stroke-linecap="round"/>
+      </g>
+    </svg></div>
     <div class="fortune"><span class="fes"></span><span class="fen"></span><span class="lucky"></span></div>
     <div class="hand">👆</div>
   </div>
