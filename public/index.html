@@ -101,21 +101,41 @@
     #itemModal .addwrap { margin:6px -18px -16px; padding:8px 18px calc(10px + env(safe-area-inset-bottom)); }
     #itemModal .go { padding:13px 20px; font-size:17px; }
   }
-  /* ---- Pantalla de gracias: toda la pantalla es la cara del robot ---- */
-  #thanks { position:fixed; inset:0; z-index:10000; display:none; background:#0b0f14; overflow:hidden; cursor:pointer; }
-  #thanks.show { display:block; }
-  #thanks .face { position:absolute; inset:0; width:100%; height:100%; animation:bow 4.2s ease-in-out both; }
-  #thanks .glow { filter:drop-shadow(0 0 14px #7ff3ff) drop-shadow(0 0 38px #18c8ff); }
-  #thanks .eye { transform-box:fill-box; transform-origin:center; animation:blink 4.2s linear both; }
-  #thanks .open { animation:openE 4.2s step-end both; }
-  #thanks .shut { opacity:0; animation:shutE 4.2s step-end both; }
-  #thanks h1 { position:absolute; left:0; right:0; bottom:5vh; line-height:1.05; text-align:center; color:#8ff4ff; font-weight:900;
-    font-size:clamp(44px,11vw,150px); text-shadow:0 0 18px #18c8ff, 0 0 46px #0091ea; animation:pop .6s cubic-bezier(.2,1.6,.4,1) both; }
-  /* Parpadea dos veces, hace reverencia con los ojos cerrados, regresa y vuelve a parpadear */
-  @keyframes blink { 0%,6%,10%,18%,22%,100% { transform:scaleY(1) } 8%,20% { transform:scaleY(.08) } }
-  @keyframes openE { 0% { opacity:1 } 34% { opacity:0 } 72% { opacity:1 } }
-  @keyframes shutE { 0% { opacity:0 } 34% { opacity:1 } 72% { opacity:0 } }
-  @keyframes bow { 0%,30% { transform:translateY(0) } 44%,62% { transform:translateY(10vh) } 76%,100% { transform:translateY(0) } }
+  /* ---- Pantalla de gracias: galleta de la fortuna virtual ---- */
+  #thanks { position:fixed; inset:0; z-index:10000; display:none; overflow:hidden; cursor:pointer; user-select:none;
+    background:radial-gradient(circle at 50% 45%, #c62828 0%, #8e0000 60%, #4a0000 100%);
+    flex-direction:column; align-items:center; justify-content:space-between; padding:4vh 4vw 5vh; box-sizing:border-box; }
+  #thanks.show { display:flex; }
+  #thanks .ty { color:#ffd54f; font-weight:900; font-size:clamp(30px,7vw,90px); text-align:center; line-height:1.05;
+    text-shadow:0 4px 0 rgba(0,0,0,.35); animation:pop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  #thanks .stage { position:relative; width:min(92vw,80vh); flex:1; display:flex; align-items:center; justify-content:center; }
+  #thanks .cookie { width:100%; height:auto; overflow:visible; filter:drop-shadow(0 18px 24px rgba(0,0,0,.45));
+    animation:wiggle 1.6s ease-in-out infinite; }
+  #thanks .half { transform-box:fill-box; transition:transform .9s cubic-bezier(.3,1.4,.5,1), opacity .9s; }
+  #thanks .half.L { transform-origin:100% 80%; }
+  #thanks .half.R { transform-origin:0% 80%; }
+  #thanks .fortune { position:absolute; left:50%; top:50%; width:min(90vw,1000px); transform:translate(-50%,-50%) scaleX(0);
+    background:#fffdf5; color:#b71c1c; border-radius:6px; padding:3vh 4vw; box-sizing:border-box; text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.4); transition:transform .7s cubic-bezier(.2,1.3,.4,1) .45s; }
+  #thanks .fortune .fes { display:block; font-weight:900; font-size:clamp(26px,5.5vw,64px); line-height:1.15; }
+  #thanks .fortune .fen { display:block; font-weight:700; font-style:italic; color:#5d4037; font-size:clamp(20px,4vw,46px); line-height:1.2; margin-top:1.5vh; }
+  #thanks .fortune .lucky { display:block; color:#8d6e63; font-weight:700; font-size:clamp(14px,2.6vw,28px); margin-top:2vh; letter-spacing:1px; white-space:pre-line; }
+  #thanks .legend { color:#fff; font-weight:900; text-align:center; font-size:clamp(28px,6.5vw,80px); line-height:1.1;
+    text-shadow:0 4px 0 rgba(0,0,0,.35); animation:pulse 1.4s ease-in-out infinite; }
+  #thanks .legend small { display:block; color:#ffd54f; font-size:.85em; }
+  #thanks .hand { position:absolute; left:52%; bottom:6%; font-size:clamp(50px,11vw,130px); animation:tap 1.2s ease-in-out infinite; pointer-events:none; }
+  #thanks .next { display:none; color:#ffd54f; font-weight:800; font-size:clamp(18px,3.5vw,40px); text-align:center; }
+  /* Abierta: la galleta se parte, sale el papelito */
+  #thanks.opened .cookie { animation:crack .35s ease-in-out 1; }
+  #thanks.opened .half.L { transform:translate(-30%,10%) rotate(-30deg); opacity:.95; }
+  #thanks.opened .half.R { transform:translate(30%,10%) rotate(30deg); opacity:.95; }
+  #thanks.opened .fortune { transform:translate(-50%,-50%) scaleX(1); }
+  #thanks.opened .legend, #thanks.opened .hand { display:none; }
+  #thanks.opened .next { display:block; }
+  @keyframes wiggle { 0%,70%,100% { transform:rotate(0) scale(1) } 76% { transform:rotate(-4deg) scale(1.03) } 82% { transform:rotate(4deg) scale(1.03) } 88% { transform:rotate(-2deg) } 94% { transform:rotate(2deg) } }
+  @keyframes crack { 0%,100% { transform:rotate(0) } 25% { transform:rotate(-5deg) scale(1.05) } 75% { transform:rotate(5deg) scale(1.05) } }
+  @keyframes pulse { 0%,100% { transform:scale(1) } 50% { transform:scale(1.06) } }
+  @keyframes tap { 0%,100% { transform:translate(-50%,0) } 50% { transform:translate(-50%,-25px) } }
   @keyframes pop { from { transform:scale(.3); opacity:0 } to { transform:scale(1); opacity:1 } }
 </style>
 </head>
@@ -342,14 +362,53 @@ async function placeOrder(paymentMethod){
 
 /* ---- Pantalla final (4 s y regresa al menú) ---- */
 let doneTimer=null;
-let thanksTimer=null, thanksNext=null;
+let thanksTimer=null, thanksNext=null, lastFortune=-1;
+const FORTUNES = [
+  ["Hoy la suerte viene con extra limón.","Luck comes today with extra lime."],
+  ["Una sorpresa deliciosa te espera muy pronto.","A delicious surprise is coming your way soon."],
+  ["Tu sonrisa es tu mejor ingrediente.","Your smile is your best ingredient."],
+  ["Lo bueno llega a quien sabe esperar... su número.","Good things come to those who wait... for their number."],
+  ["Este año vas a lograr lo que te propongas.","This year you will achieve whatever you set out to do."],
+  ["Un amigo te traerá buenas noticias.","A friend will bring you good news."],
+  ["La vida es como un elote: mejor con todo.","Life is like an elote: better with everything on it."],
+  ["Hoy es un buen día para empezar algo nuevo.","Today is a good day to start something new."],
+  ["Tu generosidad regresará multiplicada.","Your kindness will come back to you multiplied."],
+  ["Pronto viajarás a un lugar que siempre soñaste.","Soon you will travel somewhere you have always dreamed of."],
+  ["El picante de la vida está en atreverse.","The spice of life is in daring."],
+  ["Alguien está pensando en ti con cariño.","Someone is thinking of you fondly."],
+  ["Tu esfuerzo está por dar fruto.","Your hard work is about to pay off."],
+  ["La felicidad se comparte, como unos buenos chilaquiles.","Happiness is meant to be shared, like good chilaquiles."],
+  ["Una puerta nueva se abrirá para ti esta semana.","A new door will open for you this week."],
+  ["Ríe más, preocúpate menos.","Laugh more, worry less."],
+  ["Tu familia es tu mayor tesoro.","Your family is your greatest treasure."],
+  ["El dinero llegará cuando menos lo esperes.","Money will come when you least expect it."],
+  ["Hoy alguien admirará tu buen gusto.","Today someone will admire your good taste."],
+  ["Sigue tu corazón... y tu antojo.","Follow your heart... and your cravings."],
+  ["Grandes cosas empiezan con pequeños pasos.","Great things start with small steps."],
+  ["Tu energía positiva es contagiosa.","Your positive energy is contagious."],
+  ["La paciencia es dulce, como una crepa con Nutella.","Patience is sweet, like a Nutella crepe."],
+  ["Hoy la suerte está de tu lado.","Luck is on your side today."]
+];
 function showThanks(number, then){
-  const t = $("#thanks"); t.classList.remove("show"); void t.offsetWidth; // restart animation
+  const t = $("#thanks"); t.classList.remove("show","opened"); void t.offsetWidth; // reinicia animaciones
   t.classList.add("show");
-  thanksNext = then; clearTimeout(thanksTimer); thanksTimer = setTimeout(hideThanks, 4200);
+  thanksNext = then; clearTimeout(thanksTimer);
+  thanksTimer = setTimeout(hideThanks, 12000);   // si no la abren, sigue solo
+}
+function tapCookie(){
+  const t = $("#thanks");
+  if (t.classList.contains("opened")) return hideThanks();
+  let i; do { i = Math.floor(Math.random()*FORTUNES.length); } while (i===lastFortune && FORTUNES.length>1);
+  lastFortune = i;
+  $("#thanks .fes").textContent = FORTUNES[i][0];
+  $("#thanks .fen").textContent = FORTUNES[i][1];
+  const nums = new Set(); while (nums.size<4) nums.add(1+Math.floor(Math.random()*50));
+  $("#thanks .lucky").textContent = "Números de la suerte · Lucky numbers\n" + [...nums].sort((a,b)=>a-b).join(" · ");
+  t.classList.add("opened");
+  clearTimeout(thanksTimer); thanksTimer = setTimeout(hideThanks, 9000);  // tiempo para leer
 }
 function hideThanks(){
-  clearTimeout(thanksTimer); $("#thanks").classList.remove("show");
+  clearTimeout(thanksTimer); $("#thanks").classList.remove("show","opened");
   const f = thanksNext; thanksNext = null; if (f) f();
 }
 function showDone(number, kind){
@@ -447,23 +506,35 @@ async function cancelCardOrder(){
 loadMenu().then(() => { if (location.pathname === "/square-callback") handleSquareReturn(); });
 setInterval(loadMenu, 5*60*1000);
 </script>
-<div id="thanks" onclick="hideThanks()">
-  <svg class="face" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-    <g class="eyes">
-      <g class="open glow" fill="#8ff4ff">
-        <circle class="eye" cx="320" cy="360" r="120"/>
-        <circle class="eye" cx="680" cy="360" r="120"/>
+<div id="thanks" onclick="tapCookie()">
+  <div class="ty">¡Gracias! · Thank you!</div>
+  <div class="stage">
+    <svg class="cookie" viewBox="0 0 600 400" aria-hidden="true">
+      <defs>
+        <linearGradient id="fcg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffd27a"/><stop offset=".6" stop-color="#eaa23e"/><stop offset="1" stop-color="#c47a1e"/>
+        </linearGradient>
+        <linearGradient id="fcin" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#c47a1e"/><stop offset="1" stop-color="#9a5a12"/>
+        </linearGradient>
+      </defs>
+      <g class="half L">
+        <path d="M302 78 C190 30 50 80 34 225 C26 305 95 340 160 300 C215 268 262 282 302 335 Z" fill="url(#fcg)"/>
+        <path d="M302 335 C270 292 220 268 165 292 C210 248 262 250 302 275 Z" fill="url(#fcin)"/><path d="M302 78 C190 30 50 80 34 225 C26 305 95 340 160 300 C215 268 262 282 302 335" fill="none" stroke="#9a5a12" stroke-width="6" stroke-linecap="round"/>
+        <path d="M95 160 C140 105 200 85 255 88" fill="none" stroke="#fff3cf" stroke-width="10" stroke-linecap="round" opacity=".55"/>
       </g>
-      <g class="shut glow" fill="none" stroke="#8ff4ff" stroke-width="44" stroke-linecap="round">
-        <path d="M215 380 Q320 260 425 380"/><path d="M575 380 Q680 260 785 380"/>
+      <g class="half R">
+        <g transform="translate(600,0) scale(-1,1)">
+          <path d="M302 78 C190 30 50 80 34 225 C26 305 95 340 160 300 C215 268 262 282 302 335 Z" fill="url(#fcg)"/>
+          <path d="M302 335 C270 292 220 268 165 292 C210 248 262 250 302 275 Z" fill="url(#fcin)"/><path d="M302 78 C190 30 50 80 34 225 C26 305 95 340 160 300 C215 268 262 282 302 335" fill="none" stroke="#9a5a12" stroke-width="6" stroke-linecap="round"/>
+        </g>
       </g>
-    </g>
-    <g fill="#ffffff" style="filter:drop-shadow(0 0 16px #fff)">
-      <ellipse cx="200" cy="560" rx="78" ry="54"/><ellipse cx="800" cy="560" rx="78" ry="54"/>
-    </g>
-    <path class="glow" fill="#8ff4ff" d="M330 560 Q500 600 670 560 Q640 730 500 735 Q360 730 330 560 Z"/>
-  </svg>
-  <h1>Thank you!<br>¡Gracias!</h1>
+    </svg>
+    <div class="fortune"><span class="fes"></span><span class="fen"></span><span class="lucky"></span></div>
+    <div class="hand">👆</div>
+  </div>
+  <div class="legend">Open your virtual cookie<small>¡Abre tu galleta virtual!</small></div>
+  <div class="next">Toca para continuar · Tap to continue</div>
 </div>
 </body>
 </html>
